@@ -30,7 +30,8 @@ def _ensure_observability_enabled() -> bool:
         return True
     if not ui.confirm("Observability is currently off. Enable it now?", default=True):
         return False
-    middleware_profile.write_profile(profile)  # defaults have observability enabled
+    profile = replace(profile, observability=replace(profile.observability, enabled=True))
+    middleware_profile.write_profile(profile)
     ui.success("Observability enabled.")
     return True
 
