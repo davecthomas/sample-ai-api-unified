@@ -45,7 +45,9 @@ def set_env_values(values: dict[str, str]) -> None:
     """Persist keys to .env and apply them to the current process."""
     paths.ENV_PATH.touch(exist_ok=True)
     for name, value in values.items():
-        set_key(paths.ENV_PATH, name, value, quote_mode="never")
+        # "auto" leaves simple values bare but quotes ones with spaces or "#",
+        # which would otherwise corrupt the file for every later reader.
+        set_key(paths.ENV_PATH, name, value, quote_mode="auto")
         os.environ[name] = value
 
 
