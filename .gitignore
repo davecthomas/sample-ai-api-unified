@@ -9,3 +9,15 @@
 .agents/memory/state/
 .agents/memory/logs/
 .agents/memory/.auto_bootstrap_running
+
+# sample-ai-api-unified
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+dist/
+generated_images/
+generated_videos/
+generated_frames/
+config/middleware.yaml

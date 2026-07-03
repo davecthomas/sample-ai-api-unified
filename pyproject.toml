@@ -1,0 +1,47 @@
+[project]
+name = "sample-ai-api-unified"
+version = "0.1.0"
+description = "Menu-driven console app that exercises every capability of ai-api-unified with real provider calls."
+authors = [{ name = "Dave Thomas" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "rich>=13.7,<15",
+    "PyYAML>=6.0.1,<7",
+    "python-dotenv>=1.0,<2",
+]
+
+# ai-api-unified is intentionally NOT declared here. The Makefile installs it
+# into the Poetry virtualenv from either the local checkout (editable) or the
+# latest PyPI release, so the two sources can be swapped without touching the
+# lock file. See `make use-local` and `make use-pypi`.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "ruff>=0.5",
+    "black>=24",
+    "Pillow>=10",
+]
+
+[project.scripts]
+sample-ai-api-unified = "sample_ai_api_unified.app:main"
+
+[tool.poetry]
+packages = [{ include = "sample_ai_api_unified", from = "src" }]
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "scripts"]
+
+[tool.black]
+line-length = 100
