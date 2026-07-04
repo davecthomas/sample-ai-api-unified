@@ -1,0 +1,29 @@
+# Engine selectors — the library has no default provider; the app's menus
+# fill these in for you (Providers & models menu).
+COMPLETIONS_ENGINE=google-gemini
+EMBEDDING_ENGINE=google-gemini
+IMAGE_ENGINE=google-gemini
+VIDEO_ENGINE=google-gemini
+AI_VOICE_ENGINE=google
+
+# Model overrides (optional — providers have sensible defaults)
+COMPLETIONS_MODEL_NAME=gemini-2.5-flash
+EMBEDDING_MODEL_NAME=gemini-embedding-001
+IMAGE_MODEL_NAME=imagen-4.0-generate-001
+VIDEO_MODEL_NAME=veo-3.1-lite-generate-preview
+DEFAULT_GEMINI_TTS_MODEL=gemini-2.5-pro-tts
+
+# Provider credentials — leave blank; the app walks you through getting and
+# saving each key the first time you use a provider.
+GOOGLE_GEMINI_API_KEY=
+GOOGLE_AUTH_METHOD=api_key
+OPENAI_API_KEY=
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+MICROSOFT_COGNITIVE_SERVICES_API_KEY=
+MICROSOFT_COGNITIVE_SERVICES_REGION=
+ELEVEN_LABS_API_KEY=
+
+# Middleware — managed by the app's middleware profile editor.
+# AI_MIDDLEWARE_CONFIG_PATH=config/middleware.yaml
