@@ -21,3 +21,4 @@ generated_images/
 generated_videos/
 generated_frames/
 config/middleware.yaml
+.DS_Store

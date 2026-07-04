@@ -19,12 +19,15 @@ OBSERVABILITY_LOGGERS = (
 
 _BUFFER: deque[str] = deque(maxlen=500)
 _installed = False
+_total_emitted = 0  # monotonic; unlike len(_BUFFER), unaffected by deque eviction
 
 
 class _BufferHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
+        global _total_emitted
         timestamp = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
         _BUFFER.append(f"[{timestamp}] {record.levelname} {record.getMessage()}")
+        _total_emitted += 1
 
 
 def install() -> None:
@@ -54,3 +57,16 @@ def tail(count: int = 12) -> list[str]:
 
 def all_events() -> list[str]:
     return list(_BUFFER)
+
+
+def event_count() -> int:
+    """Total events ever emitted (not capped by the buffer size)."""
+    return _total_emitted
+
+
+def events_since(count: int) -> list[str]:
+    """Events emitted after the point where event_count() returned ``count``."""
+    new = _total_emitted - count
+    if new <= 0:
+        return []
+    return list(_BUFFER)[-min(new, len(_BUFFER)) :]

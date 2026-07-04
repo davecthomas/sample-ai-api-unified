@@ -67,3 +67,13 @@ def test_provider_for_engine():
     provider = catalog.provider_for_engine("completions", "anthropic")
     assert provider is not None and provider.key == "aws"
     assert catalog.provider_for_engine("completions", "not-a-real-engine") is None
+
+
+def test_no_chatgpt_ui_labels_in_model_lists():
+    openai_engine = catalog.engine_for("completions", "openai")
+    assert "o4-mini-high" not in openai_engine.models
+
+
+def test_bedrock_llama_ids_use_inference_profile_prefix():
+    llama = catalog.engine_for("completions", "llama")
+    assert all(model.startswith("us.meta.") for model in llama.models)

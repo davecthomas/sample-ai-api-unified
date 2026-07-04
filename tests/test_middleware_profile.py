@@ -92,3 +92,22 @@ def test_redact_entities_invert_to_allowed_entities():
 @pytest.mark.parametrize("value", mp.DIRECTIONS)
 def test_directions_match_library_contract(value):
     assert value in ("input_only", "output_only", "input_output")
+
+
+def test_read_profile_tolerates_null_yaml_keys(tmp_path):
+    """A present-but-null key (valid YAML the library tolerates) must not crash."""
+    path = tmp_path / "middleware.yaml"
+    path.write_text(
+        "middleware:\n"
+        "- name: observability\n"
+        "  enabled: true\n"
+        "  settings:\n"
+        "    capabilities:\n"
+        "- name: pii_redaction\n"
+        "  enabled: true\n"
+        "  settings:\n"
+        "    allowed_entities:\n"
+    )
+    profile = mp.read_profile(path)
+    assert profile.observability.capabilities == ()
+    assert profile.pii.redact_entities == mp.PII_ENTITIES

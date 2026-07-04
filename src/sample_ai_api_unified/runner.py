@@ -47,7 +47,7 @@ def run_call(description: str, call: Callable[[], T]) -> T:
         except BaseException as exc:  # noqa: BLE001 - reported to the caller below
             failure.append(exc)
 
-    events_before = len(obs.all_events())
+    events_before = obs.event_count()
     thread = threading.Thread(target=worker, daemon=True)
     started = time.monotonic()
     thread.start()
@@ -61,7 +61,7 @@ def run_call(description: str, call: Callable[[], T]) -> T:
             thread.join(timeout=0.12)
 
     elapsed = time.monotonic() - started
-    new_events = obs.all_events()[events_before:]
+    new_events = obs.events_since(events_before)
     if new_events:
         ui.console.print(
             Panel(

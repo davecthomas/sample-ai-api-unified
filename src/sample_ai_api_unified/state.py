@@ -19,6 +19,10 @@ def current_engine(capability_key: str) -> str:
 
 
 def current_model(capability_key: str) -> str:
+    # DEFAULT_GEMINI_TTS_MODEL only applies to the google voice engine; showing
+    # it as the model for openai/azure/elevenlabs voice would be misleading.
+    if capability_key == "voice" and current_engine("voice") != "google":
+        return ""
     return os.environ.get(catalog.CAPABILITIES[capability_key].model_env, "")
 
 
@@ -43,7 +47,7 @@ def switch_engine_menu(capability_key: str) -> bool:
     for engine in capability.engines:
         provider = catalog.PROVIDERS[engine.provider]
         status = "" if catalog.provider_configured(provider) else "needs API key"
-        hint = engine.note or status
+        hint = "; ".join(part for part in (engine.note, status) if part)
         options.append(ui.MenuOption(f"{engine.selector} ({provider.label})", engine, hint))
     options.append(ui.MenuOption("Custom engine selector…", "custom"))
 

@@ -108,9 +108,12 @@ CAPABILITIES: dict[str, Capability] = {
                     "gpt-5-nano",
                     "gpt-4.1",
                     "gpt-4.1-mini",
+                    "gpt-4.1-nano",
+                    # o4-mini-high (in the library's list) is a ChatGPT UI label,
+                    # not an API model ID, so it is deliberately omitted here.
+                    "o4-mini",
                     "gpt-4o",
                     "gpt-4o-mini",
-                    "o4-mini",
                 ),
                 "gpt-4o-mini",
             ),
@@ -122,6 +125,11 @@ CAPABILITIES: dict[str, Capability] = {
                     "gemini-2.5-flash",
                     "gemini-2.5-flash-lite",
                     "gemini-2.0-flash",
+                    "gemini-2.0-flash-001",
+                    "gemini-2.0-flash-lite",
+                    "gemini-2.0-flash-lite-001",
+                    "gemini-1.5-pro-002",
+                    "gemini-1.5-flash-002",
                 ),
                 "gemini-2.5-flash",
             ),
@@ -143,6 +151,38 @@ CAPABILITIES: dict[str, Capability] = {
                 ("us.anthropic.claude-3-5-haiku-20241022-v1:0",),
                 "us.anthropic.claude-3-5-haiku-20241022-v1:0",
                 note="Routed through AWS Bedrock",
+            ),
+            Engine(
+                "llama",
+                "aws",
+                # us.-prefixed cross-region inference profiles; on-demand
+                # invocation of the bare meta.* IDs is rejected in most regions.
+                ("us.meta.llama3-1-70b-instruct-v1:0", "us.meta.llama3-1-8b-instruct-v1:0"),
+                "us.meta.llama3-1-8b-instruct-v1:0",
+                note="Bedrock alias; any Bedrock Llama model ID works",
+            ),
+            Engine(
+                "mistral",
+                "aws",
+                ("mistral.mistral-large-2402-v1:0", "mistral.mistral-small-2402-v1:0"),
+                "mistral.mistral-small-2402-v1:0",
+                note="Bedrock alias; any Bedrock Mistral model ID works",
+            ),
+            Engine(
+                "cohere",
+                "aws",
+                ("cohere.command-r-plus-v1:0", "cohere.command-r-v1:0"),
+                "cohere.command-r-v1:0",
+                note="Bedrock alias; any Bedrock Cohere model ID works",
+            ),
+            Engine(
+                "ai21",
+                "aws",
+                # AWS lists the Jamba 1.5 models as legacy, so no default is
+                # suggested; enter a current Bedrock AI21 model ID.
+                (),
+                "",
+                note="Bedrock alias; enter a current Bedrock AI21 model ID",
             ),
         ),
     ),
@@ -189,6 +229,8 @@ CAPABILITIES: dict[str, Capability] = {
                     "imagen-4.0-fast-generate-001",
                     "imagen-4.0-ultra-generate-001",
                     "gemini-2.5-flash-image",
+                    "gemini-3-pro-image-preview",
+                    "gemini-3.1-flash-image-preview",
                 ),
                 "imagen-4.0-generate-001",
             ),
@@ -207,15 +249,17 @@ CAPABILITIES: dict[str, Capability] = {
         engine_env="VIDEO_ENGINE",
         model_env="VIDEO_MODEL_NAME",
         engines=(
-            Engine("openai", "openai", ("sora-2",), "sora-2"),
+            Engine("openai", "openai", ("sora-2", "sora-2-pro"), "sora-2"),
             Engine(
                 "google-gemini",
                 "google",
                 (
-                    "veo-3.1-lite-generate-preview",
-                    "veo-3.1-fast-generate-preview",
                     "veo-3.1-generate-preview",
+                    "veo-3.1-fast-generate-preview",
+                    "veo-3.1-lite-generate-preview",
                     "veo-3.0-generate-001",
+                    "veo-3.0-fast-generate-001",
+                    "veo-2.0-generate-001",
                 ),
                 "veo-3.1-lite-generate-preview",
             ),
@@ -234,8 +278,20 @@ CAPABILITIES: dict[str, Capability] = {
         engine_env="AI_VOICE_ENGINE",
         model_env="DEFAULT_GEMINI_TTS_MODEL",
         engines=(
-            Engine("openai", "openai"),
-            Engine("google", "google", ("gemini-2.5-pro-tts", "gemini-2.5-flash-tts")),
+            Engine(
+                "openai",
+                "openai",
+                note="TTS models tts-1-hd / tts-1 / gpt-4o-mini-tts; STT whisper-1",
+            ),
+            Engine(
+                "google",
+                "google",
+                # No default_model: selecting the engine must not overwrite a
+                # user's DEFAULT_GEMINI_TTS_MODEL; the model submenu still
+                # offers these.
+                ("gemini-2.5-pro-tts", "gemini-2.5-flash-tts"),
+                note="Model set via DEFAULT_GEMINI_TTS_MODEL",
+            ),
             Engine("azure", "azure"),
             Engine("elevenlabs", "elevenlabs"),
         ),

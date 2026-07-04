@@ -86,14 +86,20 @@ def to_yaml_dict(profile: MiddlewareProfile) -> dict:
     }
 
 
-def write_profile(profile: MiddlewareProfile, path: Path = paths.MIDDLEWARE_YAML_PATH) -> Path:
+# Path defaults resolve at call time (not def time) so paths.MIDDLEWARE_YAML_PATH
+# can be redirected by tests or future config.
+
+
+def write_profile(profile: MiddlewareProfile, path: Path | None = None) -> Path:
+    path = path or paths.MIDDLEWARE_YAML_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(to_yaml_dict(profile), sort_keys=False))
     envfile.set_env_values({"AI_MIDDLEWARE_CONFIG_PATH": str(path)})
     return path
 
 
-def read_profile(path: Path = paths.MIDDLEWARE_YAML_PATH) -> MiddlewareProfile:
+def read_profile(path: Path | None = None) -> MiddlewareProfile:
+    path = path or paths.MIDDLEWARE_YAML_PATH
     if not path.exists():
         return MiddlewareProfile()
     try:
@@ -108,8 +114,10 @@ def read_profile(path: Path = paths.MIDDLEWARE_YAML_PATH) -> MiddlewareProfile:
         if entry.get("name") == "observability":
             observability = ObservabilityProfile(
                 enabled=bool(entry.get("enabled", False)),
-                direction=settings.get("direction", observability.direction),
-                capabilities=tuple(settings.get("capabilities", ())),
+                direction=settings.get("direction") or observability.direction,
+                # `or ()` also covers a present-but-null YAML key, which the
+                # library itself tolerates.
+                capabilities=tuple(settings.get("capabilities") or ()),
                 log_level=settings.get("log_level", observability.log_level),
                 token_count_mode=settings.get("token_count_mode", observability.token_count_mode),
                 emit_error_events=bool(
@@ -128,7 +136,7 @@ def read_profile(path: Path = paths.MIDDLEWARE_YAML_PATH) -> MiddlewareProfile:
                 redact_entities=tuple(
                     entity
                     for entity in PII_ENTITIES
-                    if entity not in settings.get("allowed_entities", ())
+                    if entity not in (settings.get("allowed_entities") or ())
                 ),
             )
     return MiddlewareProfile(observability=observability, pii=pii)
