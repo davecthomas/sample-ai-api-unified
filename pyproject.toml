@@ -1,12 +1,13 @@
 [project]
 name = "sample-ai-api-unified"
-version = "0.1.1"
-description = "Menu-driven console app that exercises every capability of ai-api-unified with real provider calls."
+version = "0.2.0"
+description = "Console app that exercises every capability of ai-api-unified with real provider calls, with a Textual full-screen UI and a classic Rich menu."
 authors = [{ name = "Dave Thomas" }]
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+    "textual>=0.60,<2",
     "rich>=13.7,<15",
     "PyYAML>=6.0.1,<7",
     "python-dotenv>=1.0,<2",
@@ -20,16 +21,19 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",
+    "pytest-asyncio>=0.23",
     "ruff>=0.5",
     "black>=24",
     "Pillow>=10",
 ]
 
 [project.scripts]
-sample-ai-api-unified = "sample_ai_api_unified.app:main"
+sample-ai-api-unified = "sample_ai_api_unified.tui.app:main"
+sample-ai-api-unified-classic = "sample_ai_api_unified.app:main"
 
 [tool.poetry]
 packages = [{ include = "sample_ai_api_unified", from = "src" }]
+include = [{ path = "src/sample_ai_api_unified/tui/styles.tcss", format = ["sdist", "wheel"] }]
 
 [build-system]
 requires = ["poetry-core>=2.0"]
@@ -38,6 +42,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
