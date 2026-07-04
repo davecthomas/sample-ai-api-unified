@@ -1,9 +1,8 @@
 """The Textual application: sidebar navigation plus a swappable content pane.
 
 Non-UI logic (catalog, state, envfile, onboarding, obs, samples) is shared with
-the classic Rich app. Core capabilities have full Textual screens; the rest
-show a placeholder pointing at ``make run-classic`` until their screens land in
-a follow-up PR.
+the classic Rich app. Every capability has a full Textual screen; the classic
+menu app remains available via ``make run-classic``.
 """
 
 from __future__ import annotations
@@ -17,20 +16,35 @@ from .. import catalog, envfile, obs, state
 from .screens.base import CapabilityScreen
 from .screens.completions import CompletionsScreen
 from .screens.embeddings import EmbeddingsScreen
-from .screens.placeholder import PlaceholderScreen
+from .screens.images import ImagesScreen
+from .screens.middleware import MiddlewareScreen
 from .screens.providers import ProvidersScreen
+from .screens.structured import StructuredScreen
+from .screens.videos import VideosScreen
+from .screens.voice import VoiceScreen
 
-# (label, capability/screen key, is_core)
-NAV: tuple[tuple[str, str, bool], ...] = (
-    ("Completions", "completions", True),
-    ("Embeddings", "embeddings", True),
-    ("Providers & models", "providers", True),
-    ("Structured responses", "structured", False),
-    ("Image generation", "images", False),
-    ("Video generation", "videos", False),
-    ("Voice (TTS / STT)", "voice", False),
-    ("Middleware", "middleware", False),
+# (label, capability/screen key)
+NAV: tuple[tuple[str, str], ...] = (
+    ("Completions", "completions"),
+    ("Structured responses", "structured"),
+    ("Embeddings", "embeddings"),
+    ("Image generation", "images"),
+    ("Video generation", "videos"),
+    ("Voice (TTS / STT)", "voice"),
+    ("Middleware", "middleware"),
+    ("Providers & models", "providers"),
 )
+
+SCREENS: dict[str, type[CapabilityScreen]] = {
+    "completions": CompletionsScreen,
+    "structured": StructuredScreen,
+    "embeddings": EmbeddingsScreen,
+    "images": ImagesScreen,
+    "videos": VideosScreen,
+    "voice": VoiceScreen,
+    "middleware": MiddlewareScreen,
+    "providers": ProvidersScreen,
+}
 
 
 class SampleApp(App):
@@ -47,10 +61,7 @@ class SampleApp(App):
         with Horizontal(id="main"):
             with Vertical(id="sidebar"):
                 yield Label("ai-api-unified", id="sidebar-title")
-                items = [
-                    ListItem(Label(label), classes="-core" if core else "-soon")
-                    for label, _key, core in NAV
-                ]
+                items = [ListItem(Label(label)) for label, _key in NAV]
                 yield ListView(*items, id="nav")
             yield Container(id="content")
         yield Footer()
@@ -77,21 +88,14 @@ class SampleApp(App):
         content.remove_children()
         content.mount(self._build_screen(key))
         # Keep the sidebar highlight in sync however navigation was triggered.
-        index = next((i for i, (_, nav_key, _) in enumerate(NAV) if nav_key == key), None)
+        index = next((i for i, (_, nav_key) in enumerate(NAV) if nav_key == key), None)
         if index is not None:
             nav = self.query_one("#nav", ListView)
             if nav.index != index:
                 nav.index = index
 
     def _build_screen(self, key: str) -> CapabilityScreen:
-        if key == "completions":
-            return CompletionsScreen()
-        if key == "embeddings":
-            return EmbeddingsScreen()
-        if key == "providers":
-            return ProvidersScreen()
-        label = next(label for label, nav_key, _ in NAV if nav_key == key)
-        return PlaceholderScreen(label)
+        return SCREENS[key]()
 
     # ── readiness ────────────────────────────────────────────────────
 

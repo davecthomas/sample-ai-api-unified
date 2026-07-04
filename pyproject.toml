@@ -1,6 +1,6 @@
 [project]
 name = "sample-ai-api-unified"
-version = "0.2.0"
+version = "0.2.1"
 description = "Console app that exercises every capability of ai-api-unified with real provider calls, with a Textual full-screen UI and a classic Rich menu."
 authors = [{ name = "Dave Thomas" }]
 license = { text = "MIT" }
