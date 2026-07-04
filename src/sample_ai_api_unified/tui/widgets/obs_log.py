@@ -30,4 +30,6 @@ class ObservabilityLog(RichLog):
         if new:
             for line in new:
                 self.write(line)
-            self._seen = obs.event_count()
+            # Advance by exactly what was consumed; events emitted between the
+            # read above and here are picked up next tick rather than skipped.
+            self._seen += len(new)

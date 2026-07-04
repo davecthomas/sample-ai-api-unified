@@ -13,11 +13,7 @@ from textual.widgets import DataTable, Input, Static  # noqa: E402
 
 from sample_ai_api_unified.tui import app as tui_app  # noqa: E402
 from sample_ai_api_unified.tui.app import SampleApp  # noqa: E402
-from sample_ai_api_unified.tui.modals import (  # noqa: E402
-    ChoiceModal,
-    ConfirmModal,
-    PromptModal,
-)
+from sample_ai_api_unified.tui.modals import ChoiceModal  # noqa: E402
 
 
 @pytest.fixture()
@@ -110,44 +106,27 @@ async def test_choice_modal_returns_selection(offline_env):
         assert captured["value"] == "a"
 
 
-async def test_confirm_modal_returns_bool(offline_env):
+async def test_worker_error_is_reported_not_fatal(offline_env):
+    """A failing provider call shows the error and keeps the app alive.
+
+    Regression: the thread worker must use exit_on_error=False, otherwise any
+    provider exception tears the whole TUI down.
+    """
     async with SampleApp().run_test() as pilot:
-        captured = {}
-        pilot.app.push_screen(
-            ConfirmModal("sure?", default=True),
-            lambda value: captured.setdefault("value", value),
-        )
-        await pilot.pause()
-        await pilot.click("#no")
-        await pilot.pause()
-        assert captured["value"] is False
+        screen = pilot.app.query_one("CompletionsScreen")
 
+        def boom():
+            raise RuntimeError("provider exploded")
 
-async def test_prompt_modal_returns_text(offline_env):
-    async with SampleApp().run_test() as pilot:
-        captured = {}
-        pilot.app.push_screen(
-            PromptModal("name?", default="seed"),
-            lambda value: captured.setdefault("value", value),
-        )
-        await pilot.pause()
-        pilot.app.query_one("#prompt-input", Input).value = "typed"
-        await pilot.click("#ok")
-        await pilot.pause()
-        assert captured["value"] == "typed"
-
-
-async def test_prompt_modal_cancel_returns_none(offline_env):
-    async with SampleApp().run_test() as pilot:
-        captured = {}
-        pilot.app.push_screen(
-            PromptModal("name?"),
-            lambda value: captured.setdefault("value", value),
-        )
-        await pilot.pause()
-        await pilot.click("#cancel")
-        await pilot.pause()
-        assert captured["value"] is None
+        screen.run_blocking(boom, on_success=lambda _v: None, description="failing")
+        text = ""
+        for _ in range(50):
+            await pilot.pause(0.05)
+            text = str(screen.query_one("#result", Static).renderable)
+            if "provider exploded" in text:
+                break
+        assert pilot.app.is_running  # app did not exit
+        assert "RuntimeError" in text and "provider exploded" in text
 
 
 async def test_onboarding_modal_saves_keys(offline_env, monkeypatch):

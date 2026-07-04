@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.widgets import Label, Static
 from textual.worker import WorkerFailed
 
@@ -41,7 +42,14 @@ class CapabilityScreen(Vertical):
     # ── shared helpers ───────────────────────────────────────────────
 
     def set_result(self, widget_id: str, text: str) -> None:
-        self.query_one(f"#{widget_id}", Static).update(text)
+        # Guard against a worker completing after the user navigated away and
+        # this screen (and its widgets) were removed.
+        if not self.is_mounted:
+            return
+        try:
+            self.query_one(f"#{widget_id}", Static).update(text)
+        except NoMatches:
+            pass
 
     def run_blocking(
         self,
@@ -59,13 +67,18 @@ class CapabilityScreen(Vertical):
         self.set_result(result_id, f"[dim]{description}…[/dim]")
 
         async def runner() -> None:
-            worker_obj = self.app.run_worker(call, thread=True, exclusive=False)
+            # exit_on_error=False: a failed provider call is reported in the UI,
+            # not fatal to the app (Textual's default would tear the app down).
+            worker_obj = self.app.run_worker(
+                call, thread=True, exclusive=False, exit_on_error=False
+            )
             try:
                 value = await worker_obj.wait()
             except WorkerFailed as failed:
                 error = failed.error
                 self.set_result(result_id, f"[red]{type(error).__name__}: {error}[/red]")
                 return
-            on_success(value)
+            if self.is_mounted:
+                on_success(value)
 
-        self.run_worker(runner(), exclusive=False)
+        self.run_worker(runner(), exclusive=False, exit_on_error=False)
