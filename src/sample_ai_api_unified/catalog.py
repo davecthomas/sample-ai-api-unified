@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,9 @@ class EnvKey:
     secret: bool = True
     optional: bool = False
     default: str = ""
+    # When set, the value must name an existing file (e.g. a service-account
+    # JSON), not just be non-empty.
+    must_be_file: bool = False
 
 
 @dataclass(frozen=True)
@@ -311,12 +315,34 @@ def provider_for_engine(capability_key: str, selector: str) -> Provider | None:
     return PROVIDERS.get(engine.provider) if engine else None
 
 
+# In service-account mode the library authenticates with a JSON credentials
+# file and never reads GOOGLE_GEMINI_API_KEY, so the API key is not required.
+GOOGLE_SERVICE_ACCOUNT_KEYS: tuple[EnvKey, ...] = (
+    EnvKey("GOOGLE_APPLICATION_CREDENTIALS", secret=False, must_be_file=True),
+)
+
+
+def _google_uses_service_account() -> bool:
+    return os.environ.get("GOOGLE_AUTH_METHOD", "api_key").strip().lower() == "service_account"
+
+
+def required_env_keys(provider: Provider) -> tuple[EnvKey, ...]:
+    """The env keys a provider needs, honoring Google's service-account mode
+    where GOOGLE_APPLICATION_CREDENTIALS replaces the API key."""
+    if provider.key == "google" and _google_uses_service_account():
+        return GOOGLE_SERVICE_ACCOUNT_KEYS
+    return provider.env_keys
+
+
 def missing_keys(provider: Provider) -> list[EnvKey]:
-    return [
-        key
-        for key in provider.env_keys
-        if not key.optional and not os.environ.get(key.name, "").strip()
-    ]
+    missing: list[EnvKey] = []
+    for key in required_env_keys(provider):
+        if key.optional:
+            continue
+        value = os.environ.get(key.name, "").strip()
+        if not value or (key.must_be_file and not Path(value).is_file()):
+            missing.append(key)
+    return missing
 
 
 def provider_configured(provider: Provider) -> bool:
