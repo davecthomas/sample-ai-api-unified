@@ -34,7 +34,7 @@ def ensure_provider_ready(provider: catalog.Provider) -> bool:
         return False
 
     values: dict[str, str] = {}
-    for key in provider.env_keys:
+    for key in catalog.required_env_keys(provider):
         label = key.name + (" (optional, Enter to skip)" if key.optional else "")
         entered = ui.ask(label, default=key.default if key.optional else "")
         if entered:

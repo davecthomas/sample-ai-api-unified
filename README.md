@@ -45,6 +45,22 @@ falling back to `env_template`. A `.env` with zero keys works: when you first
 touch a provider, the app shows where to get a key, prompts for it, saves it
 to `.env`, and reloads.
 
+### Google authentication
+
+Google supports two auth modes, selected by `GOOGLE_AUTH_METHOD`:
+
+- **`api_key`** (default) — set `GOOGLE_GEMINI_API_KEY`. Covers completions,
+  embeddings, images, and video.
+- **`service_account`** — set `GOOGLE_APPLICATION_CREDENTIALS` to a
+  service-account JSON key file (plus `GOOGLE_PROJECT_ID` and
+  `GOOGLE_LOCATION`); `GOOGLE_GEMINI_API_KEY` is not used. This mode is
+  required for Google **voice** — the Gemini TTS/STT endpoints reject API keys
+  and expect service-account credentials.
+
+The app recognizes both: in `service_account` mode Google reads as configured
+once the credentials file exists, without prompting for an API key. Keep the
+JSON key file out of version control (`*.json` is gitignored).
+
 ## Run
 
 ```bash
@@ -95,15 +111,16 @@ library expects to `config/middleware.yaml`, and points
 
 ## Troubleshooting
 
-- **Google voice returns 403 "Cloud Text-to-Speech API has not been used in
-  project N before or it is disabled"**: the library serves all Google voices
-  (including `gemini-*-tts`) through the Cloud Text-to-Speech API, which must
-  be enabled on the project that owns your `GOOGLE_GEMINI_API_KEY`. Sign in
-  with the Google account that created the key and enable it at
-  `https://console.developers.google.com/apis/api/texttospeech.googleapis.com/overview?project=<N>`
-  (the exact URL, with your project number, is printed in the error). Keys
-  created in AI Studio belong to that account's auto-created
-  `gen-lang-client-*` project.
+- **Google voice fails with 403/401 under an API key**: the Gemini TTS/STT
+  endpoints reject API keys ("API keys are not supported by this API" or
+  "Expected OAuth2 access token"). Use `GOOGLE_AUTH_METHOD=service_account`
+  with a service-account JSON key (see [Google authentication](#google-authentication))
+  on a project where the Cloud Text-to-Speech, Cloud Speech-to-Text, and
+  Vertex AI APIs are enabled and billing is attached.
+- **Google 403 "API has not been used in project N before or it is disabled"**:
+  enable the named API on that project at
+  `https://console.developers.google.com/apis/api/<service>/overview?project=<N>`
+  (the exact URL is printed in the error), then retry after a minute.
 - **Bedrock engines fail with credential errors**: AWS session tokens
   (`AWS_SESSION_TOKEN`) expire; refresh them and update `.env` via the
   Providers & models menu.
