@@ -9,7 +9,7 @@ CAPABILITY = "voice"
 VOICES_PER_PAGE = 24
 
 
-def _client():
+def voice_client():
     import os
 
     from ai_api_unified import AIVoiceFactory
@@ -55,7 +55,7 @@ def _pick_voice(client) -> None:
         return
 
 
-def _audio_format(client):
+def audio_format_for(client):
     if client.default_audio_format is not None:
         return client.default_audio_format
     formats = client.list_output_formats
@@ -67,14 +67,14 @@ def _speak(text: str) -> None:
         return
     engine = state.current_engine(CAPABILITY)
     with provider_errors():
-        client = _client()
+        client = voice_client()
         _pick_voice(client)
         voice = client.selected_voice
         voice_name = voice.voice_name if voice else "default"
         audio_bytes = runner.run_call(
             f"TTS via {engine} ({voice_name})",
             lambda: client.text_to_voice(
-                text_to_convert=text, voice=voice, audio_format=_audio_format(client)
+                text_to_convert=text, voice=voice, audio_format=audio_format_for(client)
             ),
         )
         audio.play_audio(audio_bytes)
@@ -87,13 +87,13 @@ def _stt_roundtrip() -> None:
     engine = state.current_engine(CAPABILITY)
     original = samples.TTS_SAMPLES[0]
     with provider_errors():
-        client = _client()
+        client = voice_client()
         audio_bytes = runner.run_call(
             f"TTS via {engine}",
             lambda: client.text_to_voice(
                 text_to_convert=original,
                 voice=client.selected_voice,
-                audio_format=_audio_format(client),
+                audio_format=audio_format_for(client),
             ),
         )
         audio.play_audio(audio_bytes)

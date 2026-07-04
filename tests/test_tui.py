@@ -45,12 +45,69 @@ async def test_keybindings_navigate(offline_env):
         assert pilot.app.query("CompletionsScreen")
 
 
-async def test_non_core_capability_shows_placeholder(offline_env):
+@pytest.mark.parametrize(
+    "key,screen_cls",
+    [
+        ("completions", "CompletionsScreen"),
+        ("structured", "StructuredScreen"),
+        ("embeddings", "EmbeddingsScreen"),
+        ("images", "ImagesScreen"),
+        ("videos", "VideosScreen"),
+        ("voice", "VoiceScreen"),
+        ("middleware", "MiddlewareScreen"),
+        ("providers", "ProvidersScreen"),
+    ],
+)
+async def test_every_capability_has_a_real_screen(offline_env, key, screen_cls):
+    async with SampleApp().run_test() as pilot:
+        pilot.app.show_screen(key)
+        await pilot.pause()
+        assert pilot.app.query(screen_cls)
+
+
+async def test_structured_gating(offline_env, monkeypatch):
+    async with SampleApp().run_test() as pilot:
+        pilot.app.show_screen("structured")
+        await pilot.pause()
+        monkeypatch.setenv("COMPLETIONS_ENGINE", "openai")
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        screen = pilot.app.query_one("StructuredScreen")
+        await pilot.click("#contact")
+        await pilot.pause()
+        assert "not configured" in str(screen.query_one("#result", Static).renderable)
+
+
+async def test_video_generate_prompts_for_confirmation(offline_env, monkeypatch):
+    monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")  # provider already configured
     async with SampleApp().run_test() as pilot:
         pilot.app.show_screen("videos")
         await pilot.pause()
-        placeholder = pilot.app.query_one("PlaceholderScreen")
-        assert "run-classic" in str(placeholder.query_one(".result-panel", Static).renderable)
+        screen = pilot.app.query_one("VideosScreen")
+        screen.query_one("#prompt", Input).value = "a neon train at dusk"
+        await pilot.click("#generate")
+        await pilot.pause()
+        assert pilot.app.query("ConfirmModal")  # cost confirmation before any call
+
+
+async def test_middleware_save_writes_profile(offline_env, monkeypatch, tmp_path):
+    from sample_ai_api_unified import middleware_profile as mp
+
+    yaml_path = tmp_path / "middleware.yaml"
+    monkeypatch.setattr(mp.paths, "MIDDLEWARE_YAML_PATH", yaml_path)
+    monkeypatch.setattr(mp.envfile, "set_env_values", lambda values: None)
+
+    async with SampleApp().run_test(size=(120, 50)) as pilot:
+        pilot.app.show_screen("middleware")
+        await pilot.pause()
+        screen = pilot.app.query_one("MiddlewareScreen")
+        from textual.widgets import Switch
+
+        screen.query_one("#pii-enabled", Switch).value = True
+        await pilot.click("#save")
+        await pilot.pause()
+        assert yaml_path.exists()
+        profile = mp.read_profile(yaml_path)
+        assert profile.pii.enabled is True
 
 
 async def test_readiness_gating(offline_env, monkeypatch):

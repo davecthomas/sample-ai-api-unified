@@ -31,14 +31,6 @@ Screen {
     padding: 0 1;
 }
 
-#nav > ListItem.-core {
-    color: $text;
-}
-
-#nav > ListItem.-soon {
-    color: $text-muted;
-}
-
 #content {
     width: 1fr;
     padding: 1 2;
@@ -82,6 +74,25 @@ DataTable {
     margin: 0 1 0 0;
 }
 
+.form-row {
+    height: auto;
+    padding: 0 0 1 0;
+}
+
+.form-row > Label {
+    padding: 1 1 0 0;
+    color: $text-muted;
+}
+
+.form-row > Switch {
+    margin: 0 2 0 0;
+}
+
+.form-row > Select {
+    width: 22;
+    margin: 0 2 0 0;
+}
+
 ObservabilityLog {
     height: 10;
     border-top: tall $secondary;
@@ -102,7 +113,7 @@ ObservabilityLog > Label {
 
 /* Modal dialogs */
 
-OnboardingModal, ChoiceModal {
+OnboardingModal, ChoiceModal, ConfirmModal {
     align: center middle;
 }
 

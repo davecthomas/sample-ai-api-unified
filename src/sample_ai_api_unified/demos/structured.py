@@ -14,7 +14,7 @@ from ..guard import provider_errors
 CAPABILITY = "completions"
 
 
-def _contact_extraction_class():
+def contact_extraction_class():
     from ai_api_unified import AIStructuredPrompt
 
     class ContactExtraction(AIStructuredPrompt):
@@ -43,7 +43,7 @@ def _contact_extraction_class():
     return ContactExtraction
 
 
-def _trip_plan_class():
+def trip_plan_class():
     from ai_api_unified import AIStructuredPrompt
 
     class TripPlan(AIStructuredPrompt):
@@ -112,7 +112,7 @@ def _token_limit_demo() -> None:
         try:
             client.strict_schema_prompt(
                 prompt="anything",
-                response_model=_contact_extraction_class(),
+                response_model=contact_extraction_class(),
                 max_response_tokens=64,
             )
             ui.warn("Expected a StructuredResponseTokenLimitError but the call succeeded.")
@@ -136,9 +136,9 @@ def run() -> None:
         if picked is None:
             return
         if picked.value == "contact":
-            _run_structured(_contact_extraction_class())
+            _run_structured(contact_extraction_class())
         elif picked.value == "trip":
-            _run_structured(_trip_plan_class())
+            _run_structured(trip_plan_class())
         elif picked.value == "limit":
             _token_limit_demo()
         elif picked.value == "engine":

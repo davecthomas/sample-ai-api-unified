@@ -11,10 +11,9 @@ It ships two front ends over the same shared logic:
   docked live observability pane, and modal dialogs;
 - the original **Rich menu app** (`make run-classic`).
 
-The TUI currently implements the core screens — completions, embeddings, and
-providers/configuration. The remaining capabilities (structured responses,
-images, video, voice, middleware) run in the classic app while their Textual
-screens land in a follow-up; the TUI links to `make run-classic` for those.
+The TUI covers every capability: completions, structured responses, embeddings,
+image generation, video generation, voice, middleware, and providers/config.
+The classic Rich app remains available for the same features.
 
 ## What it covers
 
@@ -26,7 +25,7 @@ screens land in a follow-up; the TUI links to `make run-classic` for those.
 | Image generation | `generate_images` with per-provider properties (aspect ratio, size) |
 | Video generation | Blocking `generate_video`, explicit submit/poll/download job control, frame extraction |
 | Voice | TTS through your speakers with per-provider voice pickers, speech-to-text roundtrip |
-| Middleware | Menu-driven profile editor that generates the YAML config, live observability event pane, PII redaction demos with fabricated PII |
+| Middleware | Profile editor that generates the YAML config (menu in the classic app, form in the TUI), live observability event pane, PII redaction demos with fabricated PII |
 | Providers & models | Engine/model switching at runtime, in-app API-key onboarding saved to `.env` |
 
 Every provider call renders a live pane showing elapsed time and, when the
