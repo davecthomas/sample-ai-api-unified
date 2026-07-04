@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 
 from textual import on
@@ -12,6 +10,7 @@ from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
 from ... import paths, samples, state
+from ..fileutil import open_file
 from ..modals import ChoiceModal, ConfirmModal
 from .base import CapabilityScreen
 
@@ -20,11 +19,6 @@ CAPABILITY = "videos"
 COST_WARNING = (
     "Video generation can take several minutes and bills real provider credits. Continue?"
 )
-
-
-def _open_file(path: Path) -> None:
-    if sys.platform == "darwin":
-        subprocess.run(["open", str(path)], check=False)
 
 
 class VideosScreen(CapabilityScreen):
@@ -74,7 +68,7 @@ class VideosScreen(CapabilityScreen):
             lines = [f"Job {result.job.job_id} status: {result.job.status}"]
             for artifact in result.artifacts:
                 if artifact.file_path:
-                    _open_file(Path(artifact.file_path))
+                    open_file(Path(artifact.file_path))
                     lines.append(f"Artifact: {artifact.file_path}")
                 elif artifact.remote_uri:
                     lines.append(f"Artifact (remote): {artifact.remote_uri}")

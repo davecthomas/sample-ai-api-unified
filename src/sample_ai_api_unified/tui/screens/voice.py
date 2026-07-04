@@ -98,7 +98,7 @@ class VoiceScreen(CapabilityScreen):
             return
 
         def collect() -> list:
-            client = voice_client()
+            client = self._new_client()
             voices = client.get_available_voices()
             english = [v for v in voices if (v.locale or "").startswith("en")] or voices
             return english

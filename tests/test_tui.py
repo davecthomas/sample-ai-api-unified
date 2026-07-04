@@ -110,6 +110,24 @@ async def test_middleware_save_writes_profile(offline_env, monkeypatch, tmp_path
         assert profile.pii.enabled is True
 
 
+async def test_middleware_save_preserves_unshown_fields(offline_env, monkeypatch, tmp_path):
+    """Saving from the form must not reset fields the form does not expose."""
+    from sample_ai_api_unified import middleware_profile as mp
+
+    yaml_path = tmp_path / "middleware.yaml"
+    monkeypatch.setattr(mp.paths, "MIDDLEWARE_YAML_PATH", yaml_path)
+    monkeypatch.setattr(mp.envfile, "set_env_values", lambda values: None)
+    # A profile with a non-default field the form never shows.
+    mp.write_profile(mp.MiddlewareProfile(pii=mp.PiiProfile(redact_entities=("EMAIL",))), yaml_path)
+
+    async with SampleApp().run_test(size=(120, 50)) as pilot:
+        pilot.app.show_screen("middleware")
+        await pilot.pause()
+        await pilot.click("#save")
+        await pilot.pause()
+        assert mp.read_profile(yaml_path).pii.redact_entities == ("EMAIL",)
+
+
 async def test_readiness_gating(offline_env, monkeypatch):
     async with SampleApp().run_test() as pilot:
         assert pilot.app.ensure_capability_ready("completions") is True

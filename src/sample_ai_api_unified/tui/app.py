@@ -1,9 +1,8 @@
 """The Textual application: sidebar navigation plus a swappable content pane.
 
 Non-UI logic (catalog, state, envfile, onboarding, obs, samples) is shared with
-the classic Rich app. Core capabilities have full Textual screens; the rest
-show a placeholder pointing at ``make run-classic`` until their screens land in
-a follow-up PR.
+the classic Rich app. Every capability has a full Textual screen; the classic
+menu app remains available via ``make run-classic``.
 """
 
 from __future__ import annotations

@@ -6,6 +6,8 @@ expects (AI_MIDDLEWARE_CONFIG_PATH); the user never edits YAML directly.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -19,7 +21,10 @@ CAPABILITY = "completions"
 
 
 def _select(options: tuple[str, ...], value: str, widget_id: str) -> Select:
-    return Select([(opt, opt) for opt in options], value=value, allow_blank=False, id=widget_id)
+    # Fall back to the first option if a persisted value is not a valid choice,
+    # so a hand-edited YAML cannot crash the screen at mount.
+    safe = value if value in options else options[0]
+    return Select([(opt, opt) for opt in options], value=safe, allow_blank=False, id=widget_id)
 
 
 class MiddlewareScreen(CapabilityScreen):
@@ -58,13 +63,19 @@ class MiddlewareScreen(CapabilityScreen):
 
     @on(Button.Pressed, "#save")
     def _on_save(self) -> None:
+        # Start from the on-disk profile and change only the fields the form
+        # exposes, so settings edited elsewhere (capabilities, entities, …) are
+        # preserved rather than reset to defaults.
+        current = mp.read_profile()
         profile = mp.MiddlewareProfile(
-            observability=mp.ObservabilityProfile(
+            observability=replace(
+                current.observability,
                 enabled=self.query_one("#obs-enabled", Switch).value,
                 direction=self.query_one("#obs-direction", Select).value,
                 log_level=self.query_one("#obs-log-level", Select).value,
             ),
-            pii=mp.PiiProfile(
+            pii=replace(
+                current.pii,
                 enabled=self.query_one("#pii-enabled", Switch).value,
                 strict_mode=self.query_one("#pii-strict", Switch).value,
                 direction=self.query_one("#pii-direction", Select).value,
@@ -79,8 +90,6 @@ class MiddlewareScreen(CapabilityScreen):
         # Ensure PII is enabled so the config the redactor reads is active.
         profile = mp.read_profile()
         if not profile.pii.enabled:
-            from dataclasses import replace
-
             mp.write_profile(replace(profile, pii=replace(profile.pii, enabled=True)))
             self.query_one("#pii-enabled", Switch).value = True
 
@@ -107,7 +116,9 @@ class MiddlewareScreen(CapabilityScreen):
         # Make sure observability is on so the call emits events.
         profile = mp.read_profile()
         if not profile.observability.enabled:
-            mp.write_profile(profile)
+            mp.write_profile(
+                replace(profile, observability=replace(profile.observability, enabled=True))
+            )
             self.query_one("#obs-enabled", Switch).value = True
 
         def call() -> str:

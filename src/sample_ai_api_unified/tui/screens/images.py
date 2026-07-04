@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import subprocess
-import sys
 import time
-from pathlib import Path
 
 from textual import on
 from textual.app import ComposeResult
@@ -13,6 +10,7 @@ from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
 from ... import paths, samples, state
+from ..fileutil import open_file
 from ..modals import ChoiceModal
 from .base import CapabilityScreen
 
@@ -35,11 +33,6 @@ def _default_properties(engine: str):
     from ai_api_unified import AIBaseImageProperties
 
     return AIBaseImageProperties(width=1024, height=1024)
-
-
-def _open_file(path: Path) -> None:
-    if sys.platform == "darwin":
-        subprocess.run(["open", str(path)], check=False)
 
 
 class ImagesScreen(CapabilityScreen):
@@ -82,7 +75,7 @@ class ImagesScreen(CapabilityScreen):
                 out_path.write_bytes(image_bytes)
                 saved.append(out_path)
             for out_path in saved:
-                _open_file(out_path)
+                open_file(out_path)
             return "Saved:\n" + "\n".join(str(p) for p in saved)
 
         self.run_blocking(
