@@ -1,13 +1,24 @@
 # sample-ai-api-unified
 
-A menu-driven console app that exercises every capability of
+A console app that exercises every capability of
 [`ai-api-unified`](https://pypi.org/project/ai-api-unified/) with real provider
 calls. Use it to explore the library, compare providers and models, and see
 the middleware system at work.
 
+It ships two front ends over the same shared logic:
+
+- a **Textual full-screen TUI** (default `make run`) with sidebar navigation, a
+  docked live observability pane, and modal dialogs;
+- the original **Rich menu app** (`make run-classic`).
+
+The TUI currently implements the core screens — completions, embeddings, and
+providers/configuration. The remaining capabilities (structured responses,
+images, video, voice, middleware) run in the classic app while their Textual
+screens land in a follow-up; the TUI links to `make run-classic` for those.
+
 ## What it covers
 
-| Menu | Library surface |
+| Capability | Library surface |
 | --- | --- |
 | Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, system prompts, image description via prompt media params |
 | Structured responses | `AIStructuredPrompt`, `strict_schema_prompt`, `StructuredResponseTokenLimitError` guard rail |
@@ -64,13 +75,29 @@ JSON key file out of version control (`*.json` is gitignored).
 ## Run
 
 ```bash
-make run          # local checkout (default)
-make run-pypi     # upgrades to the latest PyPI release first, then runs
+make run          # Textual TUI, local checkout (default)
+make run-pypi     # upgrades to the latest PyPI release first, then runs the TUI
+make run-classic  # classic Rich menu app
 make which        # print which library source and version is active
 ```
 
 The local checkout path defaults to `../ai_api_unified`; override with
 `make run LOCAL_LIB=/path/to/checkout`.
+
+### TUI key bindings
+
+| Key | Action |
+| --- | --- |
+| `c` | Completions screen |
+| `e` | Embeddings screen |
+| `p` | Providers & models screen |
+| `q` | Quit |
+| `Ctrl+P` | Command palette |
+
+Click a sidebar entry or use the keys above to switch screens. Buttons and list
+items respond to both mouse and keyboard. Long provider calls run on a
+background thread so the UI stays responsive, and the docked pane streams
+observability events when that middleware is enabled.
 
 ## Switching providers, models, and voices
 

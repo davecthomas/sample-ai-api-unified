@@ -1,0 +1,142 @@
+/* Theme for the ai-api-unified sample TUI. */
+
+Screen {
+    background: $surface;
+}
+
+#main {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#sidebar {
+    width: 28;
+    min-width: 22;
+    background: $panel;
+    border-right: tall $primary;
+    padding: 1 1;
+}
+
+#sidebar-title {
+    text-style: bold;
+    color: $accent;
+    padding: 0 1 1 1;
+}
+
+#nav {
+    height: auto;
+}
+
+#nav > ListItem {
+    padding: 0 1;
+}
+
+#nav > ListItem.-core {
+    color: $text;
+}
+
+#nav > ListItem.-soon {
+    color: $text-muted;
+}
+
+#content {
+    width: 1fr;
+    padding: 1 2;
+}
+
+.screen-title {
+    text-style: bold;
+    color: $accent;
+    padding: 0 0 1 0;
+}
+
+.screen-subtitle {
+    color: $text-muted;
+    padding: 0 0 1 0;
+}
+
+.field-label {
+    color: $text-muted;
+    padding: 1 0 0 0;
+}
+
+.result-panel {
+    border: round $primary;
+    padding: 1 2;
+    margin: 1 0;
+    height: auto;
+}
+
+DataTable {
+    height: auto;
+    max-height: 14;
+    margin: 0 0 1 0;
+}
+
+.actions {
+    height: auto;
+    padding: 1 0 0 0;
+}
+
+.actions > Button {
+    margin: 0 1 0 0;
+}
+
+ObservabilityLog {
+    height: 10;
+    border-top: tall $secondary;
+    background: $panel;
+}
+
+ObservabilityLog > Label {
+    color: $secondary;
+    text-style: bold;
+    padding: 0 1;
+}
+
+#obs-log {
+    height: 1fr;
+    background: $panel;
+    color: $text-muted;
+}
+
+/* Modal dialogs */
+
+PromptModal, ConfirmModal, OnboardingModal, ChoiceModal {
+    align: center middle;
+}
+
+#dialog {
+    width: 70;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+    border: thick $primary;
+    background: $surface;
+    padding: 1 2;
+}
+
+#dialog-title {
+    text-style: bold;
+    color: $accent;
+    padding: 0 0 1 0;
+}
+
+#dialog-message {
+    padding: 0 0 1 0;
+}
+
+#dialog-buttons {
+    height: auto;
+    align-horizontal: right;
+    padding: 1 0 0 0;
+}
+
+#dialog-buttons > Button {
+    margin: 0 0 0 1;
+}
+
+.spinner-line {
+    color: $accent;
+    padding: 1 0;
+}
