@@ -239,6 +239,30 @@ async def test_copy_result_copies_markup_free_error_text(offline_env):
         assert pilot.app.clipboard == "RuntimeError: 404 NOT_FOUND"
 
 
+async def test_related_rank_needs_a_seed(offline_env):
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen("embeddings")
+        await pilot.pause()
+        screen = pilot.app.query_one("EmbeddingsScreen")
+        await pilot.click("#related")
+        await pilot.pause()
+        assert "Enter a phrase" in str(screen.query_one("#result", Static).renderable)
+
+
+async def test_related_rank_gates_on_completions(offline_env, monkeypatch):
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen("embeddings")
+        await pilot.pause()
+        screen = pilot.app.query_one("EmbeddingsScreen")
+        screen.query_one("#text", Input).value = "dogs like to sniff things"
+        monkeypatch.delenv("COMPLETIONS_ENGINE", raising=False)  # generation unavailable
+        await pilot.click("#related")
+        await pilot.pause()
+        assert "Completions engine not configured" in str(
+            screen.query_one("#result", Static).renderable
+        )
+
+
 async def test_readiness_gating(offline_env, monkeypatch):
     async with SampleApp().run_test() as pilot:
         assert pilot.app.ensure_capability_ready("completions") is True

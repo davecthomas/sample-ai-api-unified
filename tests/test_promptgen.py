@@ -47,3 +47,26 @@ def test_unknown_kind_raises(stub_client):
 
 def test_kinds_cover_every_meta_prompt():
     assert set(promptgen.KINDS) == set(promptgen.META_PROMPTS)
+
+
+def test_generate_related_parses_and_cleans_lines(stub_client):
+    client = stub_client(
+        '1. "A dog wags its tail."\n'
+        "2) Cats groom themselves often.\n"
+        "- Puppies chew on shoes.\n"
+        "\n"
+        "Wolves hunt in packs.\n"
+    )
+    result = promptgen.generate_related("dogs like to sniff things", count=5)
+    assert result == [
+        "A dog wags its tail.",
+        "Cats groom themselves often.",
+        "Puppies chew on shoes.",
+        "Wolves hunt in packs.",
+    ]
+    assert "dogs like to sniff things" in client.seen  # seed passed to the model
+
+
+def test_generate_related_caps_at_count(stub_client):
+    stub_client("one\ntwo\nthree\nfour\nfive\nsix\nseven\n")
+    assert promptgen.generate_related("seed", count=3) == ["one", "two", "three"]

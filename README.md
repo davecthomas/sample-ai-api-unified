@@ -36,6 +36,12 @@ sample prompt (or, for structured, a fresh source text). Every screen also
 shows the exact prompt sent to the provider alongside its result — the
 structured screen displays the full `strict_schema_prompt` text.
 
+The embeddings screen's **Related & rank** button ties the two capabilities
+together: enter a phrase (e.g. "dogs like to sniff things"), and the completions
+model writes five topically related sentences, each is embedded, and the screen
+lists them ranked by cosine similarity to your phrase — a hands-on view of what
+embedding distance measures.
+
 ## Requirements
 
 - Python 3.11–3.13 and [Poetry](https://python-poetry.org/)
