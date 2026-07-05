@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
+from rich.text import Text
 from textual.css.query import NoMatches
 from textual.widgets import Collapsible, Label, Static
 from textual.worker import WorkerFailed
@@ -26,6 +27,9 @@ class CapabilityScreen(Vertical):
     title_text: str = ""
     #: Optional one-line subtitle.
     subtitle_text: str = ""
+    #: Plain text of the most recent result, kept so the user can copy it
+    #: (errors included) with the app's "y" binding.
+    _last_result: str = ""
 
     def compose(self) -> ComposeResult:
         yield Label(self.title_text, classes="screen-title")
@@ -59,7 +63,13 @@ class CapabilityScreen(Vertical):
         try:
             self.query_one(f"#{widget_id}", Static).update(text)
         except NoMatches:
-            pass
+            return
+        if widget_id == "result":
+            # Store the markup-free text so "y" can copy it to the clipboard.
+            try:
+                self._last_result = Text.from_markup(text).plain
+            except Exception:
+                self._last_result = text
 
     def run_blocking(
         self,

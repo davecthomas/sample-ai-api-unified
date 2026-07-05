@@ -227,6 +227,18 @@ async def test_set_result_updates_result_region(offline_env):
         assert "a long response body" in str(screen.query_one("#result", Static).renderable)
 
 
+async def test_copy_result_copies_markup_free_error_text(offline_env):
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.set_result("result", "[red]RuntimeError: 404 NOT_FOUND[/red]")
+        await pilot.pause()
+        # The stored copy text has the Rich markup stripped.
+        assert screen._last_result == "RuntimeError: 404 NOT_FOUND"
+        await pilot.press("y")
+        await pilot.pause()
+        assert pilot.app.clipboard == "RuntimeError: 404 NOT_FOUND"
+
+
 async def test_readiness_gating(offline_env, monkeypatch):
     async with SampleApp().run_test() as pilot:
         assert pilot.app.ensure_capability_ready("completions") is True

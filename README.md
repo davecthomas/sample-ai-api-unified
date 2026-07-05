@@ -95,6 +95,7 @@ The local checkout path defaults to `../ai_api_unified`; override with
 | `e` | Embeddings screen |
 | `p` | Providers & models screen |
 | `o` | Expand/collapse the observability pane |
+| `y` | Copy the current result (or error) to the clipboard |
 | `q` | Quit |
 | `Ctrl+P` | Command palette |
 
