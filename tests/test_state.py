@@ -67,9 +67,9 @@ def test_voice_model_hidden_for_non_google_engines(monkeypatch):
     assert state.current_model("voice") == "gemini-2.5-pro-tts"
 
 
-def test_ensure_supported_model_heals_unlisted_model(captured_env, monkeypatch):
+def test_ensure_supported_model_heals_unavailable_preview(captured_env, monkeypatch):
     monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
-    # A model no longer in the catalog (a removed 404 preview model).
+    # A model the library lists but Vertex 404s on (in UNAVAILABLE_MODELS).
     monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.1-lite-generate-preview")
     assert state.ensure_supported_model("videos") == "veo-3.0-fast-generate-001"
     assert captured_env["VIDEO_MODEL_NAME"] == "veo-3.0-fast-generate-001"
@@ -82,11 +82,20 @@ def test_ensure_supported_model_sets_default_when_unset(captured_env, monkeypatc
     assert captured_env["VIDEO_MODEL_NAME"] == "veo-3.0-fast-generate-001"
 
 
-def test_ensure_supported_model_keeps_a_valid_model(captured_env, monkeypatch):
+def test_ensure_supported_model_keeps_a_valid_cataloged_model(captured_env, monkeypatch):
     monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
     monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-2.0-generate-001")
     assert state.ensure_supported_model("videos") == "veo-2.0-generate-001"
     assert "VIDEO_MODEL_NAME" not in captured_env  # no rewrite for a valid model
+
+
+def test_ensure_supported_model_preserves_custom_model(captured_env, monkeypatch):
+    # A model the user set that is neither cataloged nor known-unavailable must
+    # survive — the custom-model escape hatch (ADR-0002).
+    monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
+    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-9.9-experimental-001")
+    assert state.ensure_supported_model("videos") == "veo-9.9-experimental-001"
+    assert "VIDEO_MODEL_NAME" not in captured_env  # left untouched
 
 
 def test_ensure_supported_model_leaves_custom_engine_untouched(captured_env, monkeypatch):

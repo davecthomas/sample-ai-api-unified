@@ -77,9 +77,12 @@ Google supports two auth modes, selected by `GOOGLE_AUTH_METHOD`:
   `GOOGLE_LOCATION`); `GOOGLE_GEMINI_API_KEY` is not used. This mode is
   required for Google **voice** — the Gemini TTS/STT endpoints reject API keys
   and expect service-account credentials. **Multimodal embeddings with an image
-  require `api_key` auth**: the google-genai SDK sends only text
-  parts to the Vertex `embedContent` endpoint under a service account, so the
-  embeddings screen surfaces that requirement before the call.
+  require `api_key` auth**: the google-genai SDK sends only text parts to the
+  Vertex `embedContent` endpoint under a service account. When you run the
+  Multimodal demo under `service_account`, the embeddings screen temporarily
+  switches to `api_key` auth for that one call if a `GOOGLE_GEMINI_API_KEY` is
+  set (your `GOOGLE_AUTH_METHOD` is restored afterward); with no key set it
+  tells you what to configure.
 
 The app recognizes both: in `service_account` mode Google reads as configured
 once the credentials file exists, without prompting for an API key. Keep the

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
+
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -13,6 +16,26 @@ from .base import CapabilityScreen
 
 CAPABILITY = "embeddings"
 MULTIMODAL_MODEL = "gemini-embedding-2"
+
+
+@contextlib.contextmanager
+def _google_api_key_auth():
+    """Temporarily force Google ``api_key`` auth, then restore the previous mode.
+
+    Multimodal media embeddings only work under api-key auth (the google-genai
+    SDK sends only text to the Vertex ``embedContent`` endpoint under a service
+    account). Running the demo under a temporary override lets a service-account
+    user try it without editing ``.env``, as long as a Gemini API key is set.
+    """
+    previous = os.environ.get("GOOGLE_AUTH_METHOD")
+    os.environ["GOOGLE_AUTH_METHOD"] = "api_key"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("GOOGLE_AUTH_METHOD", None)
+        else:
+            os.environ["GOOGLE_AUTH_METHOD"] = previous
 
 
 class EmbeddingsScreen(CapabilityScreen):
@@ -207,30 +230,32 @@ class EmbeddingsScreen(CapabilityScreen):
 
     @on(Button.Pressed, "#multimodal")
     def _on_multimodal(self) -> None:
-        # Multimodal needs google-gemini + gemini-embedding-2. Confirm that
-        # provider is configured before switching, so a failed attempt never
-        # leaves the user's embeddings default silently changed in .env.
-        # The google-genai SDK only sends text parts to the Vertex embedContent
-        # endpoint, so multimodal embeddings with an image require API-key auth.
-        # This is the fundamental blocker under a service account, so check it
-        # before provider configuration and before any slow failing call.
-        if catalog.google_uses_service_account():
+        # Multimodal image embeddings need google-gemini + gemini-embedding-2 and
+        # api-key auth (the google-genai SDK sends only text to the Vertex
+        # embedContent endpoint under a service account). Under a service
+        # account, run the call with a temporary api_key override if a Gemini API
+        # key is available; otherwise say what to set.
+        temp_api_key = catalog.google_uses_service_account()
+        if temp_api_key and not os.environ.get("GOOGLE_GEMINI_API_KEY"):
             self.set_result(
                 "result",
                 "[yellow]Multimodal image embeddings need API-key auth: the "
                 "google-genai SDK sends only text to Vertex under a service "
-                "account. Set GOOGLE_AUTH_METHOD=api_key (with GOOGLE_GEMINI_API_KEY) "
+                "account. Set GOOGLE_GEMINI_API_KEY (or GOOGLE_AUTH_METHOD=api_key) "
                 "to run this demo.[/yellow]",
             )
             return
-        provider = catalog.provider_for_engine(CAPABILITY, "google-gemini")
-        if provider is not None and not catalog.provider_configured(provider):
-            self.set_result(
-                "result",
-                "[yellow]Multimodal needs google-gemini configured "
-                "(set it up on the Providers screen).[/yellow]",
-            )
-            return
+        if not temp_api_key:
+            # Already on api-key auth: confirm the provider is configured before
+            # switching, so a failed attempt never silently changes the default.
+            provider = catalog.provider_for_engine(CAPABILITY, "google-gemini")
+            if provider is not None and not catalog.provider_configured(provider):
+                self.set_result(
+                    "result",
+                    "[yellow]Multimodal needs google-gemini configured "
+                    "(set it up on the Providers screen).[/yellow]",
+                )
+                return
         engine = state.current_engine(CAPABILITY)
         model = state.current_model(CAPABILITY)
         if not (engine == "google-gemini" and model == MULTIMODAL_MODEL):
@@ -254,22 +279,32 @@ class EmbeddingsScreen(CapabilityScreen):
                 )
                 from ai_api_unified.util import similarity_score
 
-                client = AIFactory.get_ai_embedding_client()
-                image_bytes = image_path.read_bytes()
-                params = AIEmbeddingsMultimodalParams(
-                    text=samples.MULTIMODAL_CAPTION,
-                    included_types=[SupportedDataType.IMAGE],
-                    included_data=[image_bytes],
-                    included_mime_types=["image/png"],
-                )
-                result = client.generate_embeddings_multimodal(params)
-                text_result = client.generate_embeddings(samples.MULTIMODAL_CAPTION)
+                # Force api-key auth for this call when the user is on a service
+                # account (media embeddings require it); otherwise leave auth as-is.
+                auth = _google_api_key_auth() if temp_api_key else contextlib.nullcontext()
+                with auth:
+                    client = AIFactory.get_ai_embedding_client()
+                    image_bytes = image_path.read_bytes()
+                    params = AIEmbeddingsMultimodalParams(
+                        text=samples.MULTIMODAL_CAPTION,
+                        included_types=[SupportedDataType.IMAGE],
+                        included_data=[image_bytes],
+                        included_mime_types=["image/png"],
+                    )
+                    result = client.generate_embeddings_multimodal(params)
+                    text_result = client.generate_embeddings(samples.MULTIMODAL_CAPTION)
                 score = similarity_score(result, text_result)
+                note = (
+                    "\n\n(ran under a temporary api_key auth override; your "
+                    "GOOGLE_AUTH_METHOD is unchanged)"
+                    if temp_api_key
+                    else ""
+                )
                 return (
                     f"Caption: {samples.MULTIMODAL_CAPTION}\n"
                     f"Image: {image_path.name}\n\n"
                     f"dimensions: {result.get('dimensions')}\n"
-                    f"cross-modal cosine similarity: {score:.4f}"
+                    f"cross-modal cosine similarity: {score:.4f}{note}"
                 )
 
             self.run_blocking(

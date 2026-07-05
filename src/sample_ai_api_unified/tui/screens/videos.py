@@ -34,11 +34,11 @@ class VideosScreen(CapabilityScreen):
             yield Button("Generate prompt", id="gen-prompt")
 
     def on_mount(self) -> None:
-        # Heal a stale/absent model so the display and the next call agree, and
-        # the library never falls back to its own (possibly 404) default.
-        state.ensure_supported_model(CAPABILITY)
         engine = state.current_engine(CAPABILITY) or "unset"
-        model = state.current_model(CAPABILITY) or "provider default"
+        # Show the model the next call will actually use (a stale/absent model
+        # resolves to the GA default) without writing to .env on a mere mount.
+        resolved, _ = state.resolve_model(CAPABILITY)
+        model = resolved or "provider default"
         self.query_one("#engine-line", Static).update(f"engine: {engine}   model: {model}")
 
     def _generate(self, prompt: str) -> None:
