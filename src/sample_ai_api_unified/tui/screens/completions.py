@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.markup import escape
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -82,7 +83,9 @@ class CompletionsScreen(CapabilityScreen):
 
             client = AIFactory.get_ai_completions_client()
             reply = client.send_prompt(prompt)
-            return f"Prompt:\n{prompt}\n\nResponse:\n{reply}"
+            # escape() so bracketed prompt/response text renders literally rather
+            # than being parsed as Rich markup.
+            return f"Prompt:\n{escape(prompt)}\n\nResponse:\n{escape(reply)}"
 
         self.run_blocking(
             call,
@@ -155,22 +158,22 @@ class CompletionsScreen(CapabilityScreen):
             params = _prompt_params(engine, system_prompt=system_prompt, image=image)
             header = ""
             if system_prompt:
-                header += f"System prompt:\n{system_prompt}\n\n"
+                header += f"System prompt:\n{escape(system_prompt)}\n\n"
             if image_path:
-                header += f"Image: {image_path}\n\n"
+                header += f"Image: {escape(str(image_path))}\n\n"
             if (system_prompt or image) and params is None:
                 header += (
-                    f"[note: engine {engine!r} has no system-prompt/image support here; "
-                    "sent the plain prompt]\n\n"
+                    f"(note: engine {engine!r} has no system-prompt/image support here; "
+                    "sent the plain prompt)\n\n"
                 )
-            header += f"Prompt:\n{user_prompt}\n\n"
+            header += f"Prompt:\n{escape(user_prompt)}\n\n"
             client = AIFactory.get_ai_completions_client()
             reply = (
                 client.send_prompt(user_prompt, other_params=params)
                 if params is not None
                 else client.send_prompt(user_prompt)
             )
-            return f"{header}Response:\n{reply}"
+            return f"{header}Response:\n{escape(reply)}"
 
         self.run_blocking(
             call,
