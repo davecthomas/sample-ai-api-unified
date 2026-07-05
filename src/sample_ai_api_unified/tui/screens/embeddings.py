@@ -19,23 +19,26 @@ MULTIMODAL_MODEL = "gemini-embedding-2"
 
 
 @contextlib.contextmanager
-def _google_api_key_auth():
-    """Temporarily force Google ``api_key`` auth, then restore the previous mode.
+def _temp_env(**overrides: str):
+    """Apply env-var overrides for the duration of a call, then restore them.
 
-    Multimodal media embeddings only work under api-key auth (the google-genai
-    SDK sends only text to the Vertex ``embedContent`` endpoint under a service
-    account). Running the demo under a temporary override lets a service-account
-    user try it without editing ``.env``, as long as a Gemini API key is set.
+    Used to run the multimodal demo with the google-gemini engine, the
+    multimodal model, and (for service-account users who have a Gemini key)
+    api-key auth — without persisting any of it to ``.env``, so a cancelled or
+    failed demo never changes the user's saved defaults. The library reads these
+    from the environment on each factory call. (Single-user app: the override is
+    process-global for the call's duration, which is fine here.)
     """
-    previous = os.environ.get("GOOGLE_AUTH_METHOD")
-    os.environ["GOOGLE_AUTH_METHOD"] = "api_key"
+    previous = {name: os.environ.get(name) for name in overrides}
+    os.environ.update(overrides)
     try:
         yield
     finally:
-        if previous is None:
-            os.environ.pop("GOOGLE_AUTH_METHOD", None)
-        else:
-            os.environ["GOOGLE_AUTH_METHOD"] = previous
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 class EmbeddingsScreen(CapabilityScreen):
@@ -256,11 +259,6 @@ class EmbeddingsScreen(CapabilityScreen):
                     "(set it up on the Providers screen).[/yellow]",
                 )
                 return
-        engine = state.current_engine(CAPABILITY)
-        model = state.current_model(CAPABILITY)
-        if not (engine == "google-gemini" and model == MULTIMODAL_MODEL):
-            state.set_engine(CAPABILITY, "google-gemini", MULTIMODAL_MODEL)
-            self.on_mount()  # refresh the engine line
         images = samples.sample_image_paths()
         if not images:
             self.set_result("result", "[yellow]No bundled images found — run: make assets[/yellow]")
@@ -279,10 +277,15 @@ class EmbeddingsScreen(CapabilityScreen):
                 )
                 from ai_api_unified.util import similarity_score
 
-                # Force api-key auth for this call when the user is on a service
-                # account (media embeddings require it); otherwise leave auth as-is.
-                auth = _google_api_key_auth() if temp_api_key else contextlib.nullcontext()
-                with auth:
+                # Run with the google-gemini multimodal model (and api-key auth
+                # for service-account users) only for this call — nothing is
+                # persisted, so a cancelled or failed demo never changes the
+                # user's saved embeddings defaults.
+                cap = catalog.CAPABILITIES[CAPABILITY]
+                overrides = {cap.engine_env: "google-gemini", cap.model_env: MULTIMODAL_MODEL}
+                if temp_api_key:
+                    overrides["GOOGLE_AUTH_METHOD"] = "api_key"
+                with _temp_env(**overrides):
                     client = AIFactory.get_ai_embedding_client()
                     image_bytes = image_path.read_bytes()
                     params = AIEmbeddingsMultimodalParams(
@@ -294,11 +297,11 @@ class EmbeddingsScreen(CapabilityScreen):
                     result = client.generate_embeddings_multimodal(params)
                     text_result = client.generate_embeddings(samples.MULTIMODAL_CAPTION)
                 score = similarity_score(result, text_result)
+                config = "google-gemini + gemini-embedding-2"
+                if temp_api_key:
+                    config += ", api_key auth"
                 note = (
-                    "\n\n(ran under a temporary api_key auth override; your "
-                    "GOOGLE_AUTH_METHOD is unchanged)"
-                    if temp_api_key
-                    else ""
+                    f"\n\n(ran with a temporary {config} config; your saved defaults are unchanged)"
                 )
                 return (
                     f"Caption: {samples.MULTIMODAL_CAPTION}\n"

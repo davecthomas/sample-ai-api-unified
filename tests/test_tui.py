@@ -330,22 +330,32 @@ async def test_multimodal_service_account_with_key_proceeds(offline_env, monkeyp
         assert pilot.app.query("ChoiceModal")  # advanced to picking an image
 
 
-def test_google_api_key_auth_restores_previous(monkeypatch):
-    from sample_ai_api_unified.tui.screens.embeddings import _google_api_key_auth
+def test_temp_env_restores_previous_value(monkeypatch):
+    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
 
     monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
-    with _google_api_key_auth():
+    with _temp_env(GOOGLE_AUTH_METHOD="api_key"):
         assert os.environ["GOOGLE_AUTH_METHOD"] == "api_key"
     assert os.environ["GOOGLE_AUTH_METHOD"] == "service_account"
 
 
-def test_google_api_key_auth_restores_absent(monkeypatch):
-    from sample_ai_api_unified.tui.screens.embeddings import _google_api_key_auth
+def test_temp_env_restores_absent_key(monkeypatch):
+    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
 
-    monkeypatch.delenv("GOOGLE_AUTH_METHOD", raising=False)
-    with _google_api_key_auth():
-        assert os.environ["GOOGLE_AUTH_METHOD"] == "api_key"
-    assert "GOOGLE_AUTH_METHOD" not in os.environ
+    monkeypatch.delenv("EMBEDDING_MODEL_NAME", raising=False)
+    with _temp_env(EMBEDDING_MODEL_NAME="gemini-embedding-2"):
+        assert os.environ["EMBEDDING_MODEL_NAME"] == "gemini-embedding-2"
+    assert "EMBEDDING_MODEL_NAME" not in os.environ
+
+
+def test_temp_env_restores_on_exception(monkeypatch):
+    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
+
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
+    with pytest.raises(RuntimeError):
+        with _temp_env(GOOGLE_AUTH_METHOD="api_key"):
+            raise RuntimeError("boom")
+    assert os.environ["GOOGLE_AUTH_METHOD"] == "service_account"  # restored on error
 
 
 async def test_videos_display_resolves_stale_model_without_writing(offline_env, monkeypatch):
