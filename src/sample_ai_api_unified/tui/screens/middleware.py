@@ -160,11 +160,24 @@ class MiddlewareScreen(CapabilityScreen):
             return (
                 f"Model replied: {reply.strip()}\n\n"
                 f"Captured {len(events)} observability events (metadata only). "
-                "See the docked pane below."
+                "They are in the observability pane below (expanded for you; "
+                "toggle with 'o')."
             )
+
+        def show(text: str) -> None:
+            self.set_result("result", text)
+            # The obs pane is collapsed by default; expand it so the events the
+            # demo just captured are actually visible.
+            from textual.css.query import NoMatches
+            from textual.widgets import Collapsible
+
+            try:
+                self.app.query_one("#obs-panel", Collapsible).collapsed = False
+            except NoMatches:
+                pass
 
         self.run_blocking(
             call,
-            on_success=lambda text: self.set_result("result", text),
+            on_success=show,
             description=f"Observed completion via {state.current_engine(CAPABILITY)}",
         )

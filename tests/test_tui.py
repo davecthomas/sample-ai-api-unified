@@ -227,6 +227,39 @@ async def test_set_result_updates_result_region(offline_env):
         assert "a long response body" in str(screen.query_one("#result", Static).renderable)
 
 
+async def test_obs_demo_expands_the_pane(offline_env, monkeypatch, tmp_path):
+    """The observability demo captures events into the pane, so it must expand
+    the collapsed-by-default pane to make them visible."""
+    import ai_api_unified
+
+    from sample_ai_api_unified import middleware_profile as mp
+
+    yaml_path = tmp_path / "middleware.yaml"
+    monkeypatch.setattr(mp.paths, "MIDDLEWARE_YAML_PATH", yaml_path)
+    monkeypatch.setattr(mp.envfile, "set_env_values", lambda values: None)
+
+    class _FakeCompletions:
+        def send_prompt(self, prompt: str) -> str:
+            return "observed"
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory,
+        "get_ai_completions_client",
+        staticmethod(lambda: _FakeCompletions()),
+    )
+
+    from textual.widgets import Collapsible
+
+    async with SampleApp().run_test(size=(120, 50)) as pilot:
+        pilot.app.show_screen("middleware")
+        await pilot.pause()
+        assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is True
+        await pilot.click("#obs-demo")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is False
+
+
 async def test_copy_result_copies_markup_free_error_text(offline_env):
     async with SampleApp().run_test(size=(120, 44)) as pilot:
         screen = pilot.app.query_one("CompletionsScreen")
