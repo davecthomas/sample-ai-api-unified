@@ -11,7 +11,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Footer, Label, ListItem, ListView
 
-from .. import envfile, obs, state
+from .. import clipboard, envfile, obs, state
 from .screens.base import CapabilityScreen
 from .screens.completions import CompletionsScreen
 from .screens.embeddings import EmbeddingsScreen
@@ -104,11 +104,19 @@ class SampleApp(App):
         except NoMatches:
             return
         text = getattr(screen, "_last_result", "")
-        if text:
-            self.copy_to_clipboard(text)
+        if not text:
+            self.notify("Nothing to copy yet.", severity="warning")
+            return
+        if clipboard.copy_to_clipboard(text):
             self.notify("Copied result to the clipboard.")
         else:
-            self.notify("Nothing to copy yet.", severity="warning")
+            # No OS clipboard tool found (e.g. headless/SSH). Fall back to the
+            # terminal's OSC 52 clipboard, which works only where supported.
+            self.copy_to_clipboard(text)
+            self.notify(
+                "Sent to the terminal clipboard (OSC 52); paste may not work " "in every terminal.",
+                severity="warning",
+            )
 
     def show_screen(self, key: str) -> None:
         content = self.query_one("#content", Container)

@@ -5,6 +5,8 @@ real provider-call path is exercised by the shared worker helper but is not hit
 here; readiness gating short-circuits before any network call.
 """
 
+import os
+
 import pytest
 
 pytest.importorskip("ai_api_unified")
@@ -17,10 +19,15 @@ from sample_ai_api_unified.tui.modals import ChoiceModal  # noqa: E402
 
 
 @pytest.fixture()
-def offline_env(monkeypatch):
+def offline_env(monkeypatch, tmp_path):
     """Stop the app touching the real .env, and give a deterministic config."""
     monkeypatch.setattr(tui_app.envfile, "ensure_env_file", lambda: None)
     monkeypatch.setattr(tui_app.envfile, "reload_env", lambda: None)
+    # Redirect any .env write (e.g. a model heal) to a throwaway file so no test
+    # can mutate the developer's real .env in the repo root.
+    from sample_ai_api_unified import paths
+
+    monkeypatch.setattr(paths, "ENV_PATH", tmp_path / ".env")
     monkeypatch.setenv("COMPLETIONS_ENGINE", "google-gemini")
     monkeypatch.setenv("GOOGLE_AUTH_METHOD", "api_key")
     monkeypatch.setenv("GOOGLE_GEMINI_API_KEY", "test-key")
@@ -260,7 +267,13 @@ async def test_obs_demo_expands_the_pane(offline_env, monkeypatch, tmp_path):
         assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is False
 
 
-async def test_copy_result_copies_markup_free_error_text(offline_env):
+async def test_copy_result_copies_markup_free_error_text(offline_env, monkeypatch):
+    from sample_ai_api_unified import clipboard
+
+    captured = {}
+    monkeypatch.setattr(
+        clipboard, "copy_to_clipboard", lambda text: captured.update(text=text) or True
+    )
     async with SampleApp().run_test(size=(120, 44)) as pilot:
         screen = pilot.app.query_one("CompletionsScreen")
         screen.set_result("result", "[red]RuntimeError: 404 NOT_FOUND[/red]")
@@ -269,7 +282,98 @@ async def test_copy_result_copies_markup_free_error_text(offline_env):
         assert screen._last_result == "RuntimeError: 404 NOT_FOUND"
         await pilot.press("y")
         await pilot.pause()
-        assert pilot.app.clipboard == "RuntimeError: 404 NOT_FOUND"
+        # The system clipboard (pbcopy/xclip/…) receives the markup-free text.
+        assert captured["text"] == "RuntimeError: 404 NOT_FOUND"
+
+
+async def test_copy_result_falls_back_to_osc52(offline_env, monkeypatch):
+    from sample_ai_api_unified import clipboard
+
+    # No OS clipboard tool available → fall back to the terminal OSC 52 path.
+    monkeypatch.setattr(clipboard, "copy_to_clipboard", lambda text: False)
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.set_result("result", "boom")
+        await pilot.pause()
+        await pilot.press("y")
+        await pilot.pause()
+        assert pilot.app.clipboard == "boom"
+
+
+async def test_multimodal_warns_service_account_without_key(offline_env, monkeypatch):
+    # Service-account auth cannot do media embeddings, and with no Gemini API key
+    # there is nothing to temporarily switch to — so it must warn.
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
+    monkeypatch.delenv("GOOGLE_GEMINI_API_KEY", raising=False)
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen("embeddings")
+        await pilot.pause()
+        screen = pilot.app.query_one("EmbeddingsScreen")
+        await pilot.click("#multimodal")
+        await pilot.pause()
+        result = str(screen.query_one("#result", Static).renderable)
+        assert "API-key auth" in result and "GOOGLE_GEMINI_API_KEY" in result
+
+
+async def test_multimodal_service_account_with_key_proceeds(offline_env, monkeypatch):
+    # Service account plus a Gemini API key: the demo proceeds to the image
+    # picker (it will run under a temporary api_key override), no warning.
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
+    monkeypatch.setenv("GOOGLE_GEMINI_API_KEY", "test-key")
+    async with SampleApp().run_test(size=(140, 44)) as pilot:
+        pilot.app.show_screen("embeddings")
+        await pilot.pause()
+        screen = pilot.app.query_one("EmbeddingsScreen")
+        await pilot.click("#multimodal")
+        await pilot.pause()
+        assert "API-key auth" not in str(screen.query_one("#result", Static).renderable)
+        assert pilot.app.query("ChoiceModal")  # advanced to picking an image
+
+
+def test_temp_env_restores_previous_value(monkeypatch):
+    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
+
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
+    with _temp_env(GOOGLE_AUTH_METHOD="api_key"):
+        assert os.environ["GOOGLE_AUTH_METHOD"] == "api_key"
+    assert os.environ["GOOGLE_AUTH_METHOD"] == "service_account"
+
+
+def test_temp_env_restores_absent_key(monkeypatch):
+    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
+
+    monkeypatch.delenv("EMBEDDING_MODEL_NAME", raising=False)
+    with _temp_env(EMBEDDING_MODEL_NAME="gemini-embedding-2"):
+        assert os.environ["EMBEDDING_MODEL_NAME"] == "gemini-embedding-2"
+    assert "EMBEDDING_MODEL_NAME" not in os.environ
+
+
+def test_temp_env_restores_on_exception(monkeypatch):
+    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
+
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
+    with pytest.raises(RuntimeError):
+        with _temp_env(GOOGLE_AUTH_METHOD="api_key"):
+            raise RuntimeError("boom")
+    assert os.environ["GOOGLE_AUTH_METHOD"] == "service_account"  # restored on error
+
+
+async def test_videos_display_resolves_stale_model_without_writing(offline_env, monkeypatch):
+    """Mounting the Videos screen shows the model the next call will use (a stale
+    preview model resolves to the GA default) but must not persist on a mount."""
+    from sample_ai_api_unified import state
+
+    monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
+    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.1-lite-generate-preview")  # unavailable
+    writes: list = []
+    monkeypatch.setattr(state, "set_model", lambda cap, model: writes.append((cap, model)))
+
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen("videos")
+        await pilot.pause()
+        line = str(pilot.app.query_one("VideosScreen").query_one("#engine-line", Static).renderable)
+        assert "veo-3.0-fast-generate-001" in line  # display shows the resolved GA model
+        assert writes == []  # a mere mount persisted nothing
 
 
 async def test_related_rank_needs_a_seed(offline_env):

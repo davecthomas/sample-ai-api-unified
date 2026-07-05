@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
+
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -13,6 +16,29 @@ from .base import CapabilityScreen
 
 CAPABILITY = "embeddings"
 MULTIMODAL_MODEL = "gemini-embedding-2"
+
+
+@contextlib.contextmanager
+def _temp_env(**overrides: str):
+    """Apply env-var overrides for the duration of a call, then restore them.
+
+    Used to run the multimodal demo with the google-gemini engine, the
+    multimodal model, and (for service-account users who have a Gemini key)
+    api-key auth — without persisting any of it to ``.env``, so a cancelled or
+    failed demo never changes the user's saved defaults. The library reads these
+    from the environment on each factory call. (Single-user app: the override is
+    process-global for the call's duration, which is fine here.)
+    """
+    previous = {name: os.environ.get(name) for name in overrides}
+    os.environ.update(overrides)
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 class EmbeddingsScreen(CapabilityScreen):
@@ -207,22 +233,32 @@ class EmbeddingsScreen(CapabilityScreen):
 
     @on(Button.Pressed, "#multimodal")
     def _on_multimodal(self) -> None:
-        # Multimodal needs google-gemini + gemini-embedding-2. Confirm that
-        # provider is configured before switching, so a failed attempt never
-        # leaves the user's embeddings default silently changed in .env.
-        provider = catalog.provider_for_engine(CAPABILITY, "google-gemini")
-        if provider is not None and not catalog.provider_configured(provider):
+        # Multimodal image embeddings need google-gemini + gemini-embedding-2 and
+        # api-key auth (the google-genai SDK sends only text to the Vertex
+        # embedContent endpoint under a service account). Under a service
+        # account, run the call with a temporary api_key override if a Gemini API
+        # key is available; otherwise say what to set.
+        temp_api_key = catalog.google_uses_service_account()
+        if temp_api_key and not os.environ.get("GOOGLE_GEMINI_API_KEY"):
             self.set_result(
                 "result",
-                "[yellow]Multimodal needs google-gemini configured "
-                "(set it up on the Providers screen).[/yellow]",
+                "[yellow]Multimodal image embeddings need API-key auth: the "
+                "google-genai SDK sends only text to Vertex under a service "
+                "account. Set GOOGLE_GEMINI_API_KEY (or GOOGLE_AUTH_METHOD=api_key) "
+                "to run this demo.[/yellow]",
             )
             return
-        engine = state.current_engine(CAPABILITY)
-        model = state.current_model(CAPABILITY)
-        if not (engine == "google-gemini" and model == MULTIMODAL_MODEL):
-            state.set_engine(CAPABILITY, "google-gemini", MULTIMODAL_MODEL)
-            self.on_mount()  # refresh the engine line
+        if not temp_api_key:
+            # Already on api-key auth: confirm the provider is configured before
+            # switching, so a failed attempt never silently changes the default.
+            provider = catalog.provider_for_engine(CAPABILITY, "google-gemini")
+            if provider is not None and not catalog.provider_configured(provider):
+                self.set_result(
+                    "result",
+                    "[yellow]Multimodal needs google-gemini configured "
+                    "(set it up on the Providers screen).[/yellow]",
+                )
+                return
         images = samples.sample_image_paths()
         if not images:
             self.set_result("result", "[yellow]No bundled images found — run: make assets[/yellow]")
@@ -241,22 +277,37 @@ class EmbeddingsScreen(CapabilityScreen):
                 )
                 from ai_api_unified.util import similarity_score
 
-                client = AIFactory.get_ai_embedding_client()
-                image_bytes = image_path.read_bytes()
-                params = AIEmbeddingsMultimodalParams(
-                    text=samples.MULTIMODAL_CAPTION,
-                    included_types=[SupportedDataType.IMAGE],
-                    included_data=[image_bytes],
-                    included_mime_types=["image/png"],
-                )
-                result = client.generate_embeddings_multimodal(params)
-                text_result = client.generate_embeddings(samples.MULTIMODAL_CAPTION)
+                # Run with the google-gemini multimodal model (and api-key auth
+                # for service-account users) only for this call — nothing is
+                # persisted, so a cancelled or failed demo never changes the
+                # user's saved embeddings defaults.
+                cap = catalog.CAPABILITIES[CAPABILITY]
+                overrides = {cap.engine_env: "google-gemini", cap.model_env: MULTIMODAL_MODEL}
+                if temp_api_key:
+                    overrides["GOOGLE_AUTH_METHOD"] = "api_key"
+                with _temp_env(**overrides):
+                    client = AIFactory.get_ai_embedding_client()
+                    image_bytes = image_path.read_bytes()
+                    params = AIEmbeddingsMultimodalParams(
+                        text=samples.MULTIMODAL_CAPTION,
+                        included_types=[SupportedDataType.IMAGE],
+                        included_data=[image_bytes],
+                        included_mime_types=["image/png"],
+                    )
+                    result = client.generate_embeddings_multimodal(params)
+                    text_result = client.generate_embeddings(samples.MULTIMODAL_CAPTION)
                 score = similarity_score(result, text_result)
+                config = "google-gemini + gemini-embedding-2"
+                if temp_api_key:
+                    config += ", api_key auth"
+                note = (
+                    f"\n\n(ran with a temporary {config} config; your saved defaults are unchanged)"
+                )
                 return (
                     f"Caption: {samples.MULTIMODAL_CAPTION}\n"
                     f"Image: {image_path.name}\n\n"
                     f"dimensions: {result.get('dimensions')}\n"
-                    f"cross-modal cosine similarity: {score:.4f}"
+                    f"cross-modal cosine similarity: {score:.4f}{note}"
                 )
 
             self.run_blocking(

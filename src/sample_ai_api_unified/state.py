@@ -38,6 +38,53 @@ def set_model(capability_key: str, model: str) -> None:
     envfile.set_env_values({catalog.CAPABILITIES[capability_key].model_env: model})
 
 
+# Models the library still lists as supported but that are not deployed on the
+# provider (they 404). A persisted or defaulted value here is healed to the
+# engine's GA default; any other value the user set is left alone so the
+# custom-model escape hatch (ADR-0002) keeps working.
+UNAVAILABLE_MODELS: frozenset[str] = frozenset(
+    {
+        "veo-3.1-generate-preview",
+        "veo-3.1-fast-generate-preview",
+        "veo-3.1-lite-generate-preview",
+    }
+)
+
+
+def resolve_model(capability_key: str) -> tuple[str, bool]:
+    """Resolve the model to use for the current engine without writing anything.
+
+    Returns ``(model, needs_persist)``. The library reads the model from the
+    environment on every factory call and falls back to its own default when the
+    variable is unset — and that default can be a model that no longer runs. So
+    when the persisted model is unset or a known-unavailable model, resolve to
+    the engine's default and flag that it should be persisted. Custom engines
+    and user-chosen custom models are left as-is.
+    """
+    selector = current_engine(capability_key)
+    if not selector:
+        return "", False
+    engine = catalog.engine_for(capability_key, selector)
+    if engine is None or not engine.default_model:
+        return current_model(capability_key), False  # custom/unknown engine
+    model = current_model(capability_key)
+    if (not model or model in UNAVAILABLE_MODELS) and model != engine.default_model:
+        return engine.default_model, True
+    return model, False
+
+
+def ensure_supported_model(capability_key: str) -> str:
+    """Resolve the model for the current engine, persisting a heal if needed.
+
+    Call this before a factory call so the library never falls back to its own
+    (possibly 404) default. For read-only display use ``resolve_model``.
+    """
+    model, needs_persist = resolve_model(capability_key)
+    if needs_persist:
+        set_model(capability_key, model)
+    return model
+
+
 def capability_ready(capability_key: str) -> bool:
     """True when an engine is selected and its provider has credentials.
 

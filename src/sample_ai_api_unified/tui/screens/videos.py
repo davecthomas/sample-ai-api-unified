@@ -35,7 +35,10 @@ class VideosScreen(CapabilityScreen):
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"
-        model = state.current_model(CAPABILITY) or "provider default"
+        # Show the model the next call will actually use (a stale/absent model
+        # resolves to the GA default) without writing to .env on a mere mount.
+        resolved, _ = state.resolve_model(CAPABILITY)
+        model = resolved or "provider default"
         self.query_one("#engine-line", Static).update(f"engine: {engine}   model: {model}")
 
     def _generate(self, prompt: str) -> None:
@@ -54,6 +57,9 @@ class VideosScreen(CapabilityScreen):
 
     def _run(self, prompt: str) -> None:
         engine = state.current_engine(CAPABILITY)
+        # Make sure a valid model is persisted before the factory reads the env,
+        # so it does not fall back to the library's default (which may 404).
+        state.ensure_supported_model(CAPABILITY)
 
         def call() -> str:
             from ai_api_unified import AIBaseVideoProperties, AIFactory

@@ -258,9 +258,8 @@ CAPABILITIES: dict[str, Capability] = {
                 "google-gemini",
                 "google",
                 (
-                    "veo-3.1-generate-preview",
-                    "veo-3.1-fast-generate-preview",
-                    "veo-3.1-lite-generate-preview",
+                    # veo-3.1-*-preview models are not published on Vertex
+                    # (they 404), so the catalog lists only GA models that run.
                     "veo-3.0-generate-001",
                     "veo-3.0-fast-generate-001",
                     "veo-2.0-generate-001",
@@ -325,8 +324,14 @@ GOOGLE_SERVICE_ACCOUNT_KEYS: tuple[EnvKey, ...] = (
 )
 
 
-def _google_uses_service_account() -> bool:
+def google_uses_service_account() -> bool:
+    """True when Google auth is configured for service-account credentials
+    (GOOGLE_APPLICATION_CREDENTIALS) rather than an API key."""
     return os.environ.get("GOOGLE_AUTH_METHOD", "api_key").strip().lower() == "service_account"
+
+
+# Backwards-compatible private alias.
+_google_uses_service_account = google_uses_service_account
 
 
 def required_env_keys(provider: Provider) -> tuple[EnvKey, ...]:
