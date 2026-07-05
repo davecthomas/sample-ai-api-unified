@@ -258,16 +258,15 @@ CAPABILITIES: dict[str, Capability] = {
                 "google-gemini",
                 "google",
                 (
-                    # veo-3.1-*-preview models are not published on Vertex
-                    # (they 404), so the catalog lists only GA models that run.
-                    "veo-3.0-generate-001",
-                    "veo-3.0-fast-generate-001",
-                    "veo-2.0-generate-001",
+                    # Video download runs through the google-genai Developer
+                    # (api-key) client, whose model catalog is the veo-3.1
+                    # preview family. The Vertex-only GA names
+                    # (veo-3.0-*/veo-2.0-*) 404 on the Developer API.
+                    "veo-3.1-generate-preview",
+                    "veo-3.1-fast-generate-preview",
+                    "veo-3.1-lite-generate-preview",
                 ),
-                # The library's own DEFAULT_VIDEO_MODEL is a preview model that
-                # Vertex rejects with 404 (not a published model). Default to a
-                # GA model so video generation is runnable out of the box.
-                "veo-3.0-fast-generate-001",
+                "veo-3.1-lite-generate-preview",  # the library's own default
             ),
             Engine(
                 "nova-reel",

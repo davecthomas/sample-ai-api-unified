@@ -62,15 +62,17 @@ def set_model(capability_key: str, model: str) -> None:
     envfile.set_env_values({catalog.CAPABILITIES[capability_key].model_env: model})
 
 
-# Models the library still lists as supported but that are not deployed on the
-# provider (they 404). A persisted or defaulted value here is healed to the
-# engine's GA default; any other value the user set is left alone so the
-# custom-model escape hatch (ADR-0002) keeps working.
+# Models known to 404 on the path the app actually calls. Google video runs
+# through the Developer (api-key) client, whose catalog is the veo-3.1 preview
+# family; these Vertex-only names are not served there. A persisted value here
+# (e.g. written by an older build of this app) is healed to the engine default;
+# any other value the user set is left alone so the custom-model escape hatch
+# (ADR-0002) keeps working.
 UNAVAILABLE_MODELS: frozenset[str] = frozenset(
     {
-        "veo-3.1-generate-preview",
-        "veo-3.1-fast-generate-preview",
-        "veo-3.1-lite-generate-preview",
+        "veo-3.0-generate-001",
+        "veo-3.0-fast-generate-001",
+        "veo-2.0-generate-001",
     }
 )
 

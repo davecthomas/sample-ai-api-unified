@@ -407,11 +407,12 @@ def test_temp_env_restores_on_exception(monkeypatch):
 
 async def test_videos_display_resolves_stale_model_without_writing(offline_env, monkeypatch):
     """Mounting the Videos screen shows the model the next call will use (a stale
-    preview model resolves to the GA default) but must not persist on a mount."""
+    Vertex-only name resolves to the Developer-API default) but must not persist
+    on a mount."""
     from sample_ai_api_unified import state
 
     monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
-    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.1-lite-generate-preview")  # unavailable
+    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.0-fast-generate-001")  # Vertex-only, 404s
     writes: list = []
     monkeypatch.setattr(state, "set_model", lambda cap, model: writes.append((cap, model)))
 
@@ -419,7 +420,7 @@ async def test_videos_display_resolves_stale_model_without_writing(offline_env, 
         pilot.app.show_screen("videos")
         await pilot.pause()
         line = str(pilot.app.query_one("VideosScreen").query_one("#engine-line", Static).renderable)
-        assert "veo-3.0-fast-generate-001" in line  # display shows the resolved GA model
+        assert "veo-3.1-lite-generate-preview" in line  # the resolved Developer-API default
         assert writes == []  # a mere mount persisted nothing
 
 
