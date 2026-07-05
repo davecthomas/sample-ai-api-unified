@@ -18,7 +18,7 @@ keep that space for the response.
 
 | Capability | Library surface |
 | --- | --- |
-| Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, system prompts, image description via prompt media params |
+| Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, `send_prompt_streaming` (live token streaming), system prompts, image description via prompt media params |
 | Structured responses | `AIStructuredPrompt`, `strict_schema_prompt`, `StructuredResponseTokenLimitError` guard rail |
 | Embeddings | `generate_embeddings`, batches, cosine similarity, multimodal embeddings (`gemini-embedding-2`), capabilities descriptor |
 | Image generation | `generate_images` with per-provider properties (aspect ratio, size) |
@@ -35,6 +35,13 @@ have a **Generate** button that uses the completions API to write a fresh
 sample prompt (or, for structured, a fresh source text). Every screen also
 shows the exact prompt sent to the provider alongside its result — the
 structured screen displays the full `strict_schema_prompt` text.
+
+The completions screen has both **Send** (the full reply arrives at once) and
+**Stream** (`send_prompt_streaming`), which renders the response token by token
+as the provider produces it, with a live cursor and a final chunk count. Ask for
+something longer (a story, an explanation) to watch it arrive. Streaming is
+unavailable while PII redaction middleware is enabled — the library cannot
+guarantee redaction across chunk boundaries — and the screen says so if you try.
 
 The embeddings screen's **Related & rank** button ties the two capabilities
 together: enter a phrase (e.g. "dogs like to sniff things"), and the completions

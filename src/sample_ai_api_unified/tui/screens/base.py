@@ -103,6 +103,53 @@ class CapabilityScreen(Vertical):
 
         self.run_worker(runner(), exclusive=False, exit_on_error=False)
 
+    def run_streaming(
+        self,
+        open_stream: Callable[[], Any],
+        *,
+        prefix: str = "",
+        description: str = "Streaming",
+        result_id: str = "result",
+    ) -> None:
+        """Consume a provider text-chunk stream, rendering it live in the result pane.
+
+        ``open_stream`` runs on a worker thread and returns an iterator of text
+        chunks (e.g. ``client.send_prompt_streaming(prompt)``). Each chunk is
+        appended and the pane is updated from the app thread; a provider or
+        configuration error is shown in the pane instead of crashing the app.
+        """
+        self.set_result(result_id, f"{prefix}[dim]{description}…[/dim]")
+
+        def worker() -> None:
+            parts: list[str] = []
+            try:
+                for chunk in open_stream():
+                    parts.append(str(chunk))
+                    self.app.call_from_thread(
+                        self._render_stream, result_id, prefix, "".join(parts), len(parts), False
+                    )
+            except Exception as error:  # noqa: BLE001 - report any provider/config error
+                self.app.call_from_thread(
+                    self.set_result, result_id, f"[red]{type(error).__name__}: {error}[/red]"
+                )
+                return
+            self.app.call_from_thread(
+                self._render_stream, result_id, prefix, "".join(parts), len(parts), True
+            )
+
+        self.run_worker(worker, thread=True, exclusive=False, exit_on_error=False)
+
+    def _render_stream(
+        self, result_id: str, prefix: str, text: str, chunk_count: int, done: bool
+    ) -> None:
+        if not self.is_mounted:
+            return
+        if done:
+            body = f"{prefix}{text}\n\n[dim]— streamed {chunk_count} chunks[/dim]"
+        else:
+            body = f"{prefix}{text} [dim]▌[/dim]"  # cursor while streaming
+        self.set_result(result_id, body)
+
     def generate_prompt(self, kind: str, fill: Callable[[str], None]) -> None:
         """Generate a fresh prompt of ``kind`` via the completions API.
 
