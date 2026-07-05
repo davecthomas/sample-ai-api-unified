@@ -24,7 +24,6 @@ class ProvidersScreen(CapabilityScreen):
         with Horizontal(classes="actions"):
             yield Button("Switch engine…", variant="primary", id="switch")
             yield Button("Configure keys…", id="keys")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         config = self.query_one("#config-table", DataTable)

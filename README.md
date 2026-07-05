@@ -5,10 +5,14 @@ A **Textual full-screen TUI** that exercises every capability of
 calls. Use it to explore the library, compare providers and models, and see
 the middleware system at work.
 
-The TUI has sidebar navigation, a docked live observability pane, and modal
+The TUI has sidebar navigation, a collapsible observability pane, and modal
 dialogs, with a screen for each capability: completions, structured responses,
 embeddings, image generation, video generation, voice, middleware, and
-providers/config.
+providers/config. On every screen the controls sit at the top, the primary
+action button sits directly below the input it acts on, and the response fills
+the rest of the height in its own scrollable region so long completions are
+never clipped. The observability pane collapses by default (toggle with `o`) to
+keep that space for the response.
 
 ## What it covers
 
@@ -90,13 +94,15 @@ The local checkout path defaults to `../ai_api_unified`; override with
 | `c` | Completions screen |
 | `e` | Embeddings screen |
 | `p` | Providers & models screen |
+| `o` | Expand/collapse the observability pane |
 | `q` | Quit |
 | `Ctrl+P` | Command palette |
 
 Click a sidebar entry or use the keys above to switch screens. Buttons and list
 items respond to both mouse and keyboard. Long provider calls run on a
-background thread so the UI stays responsive, and the docked pane streams
-observability events when that middleware is enabled.
+background thread so the UI stays responsive, and the collapsible pane streams
+observability events when that middleware is enabled — press `o` (or click its
+header) to open it.
 
 ## Switching providers, models, and voices
 

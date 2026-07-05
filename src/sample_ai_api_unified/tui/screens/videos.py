@@ -32,7 +32,6 @@ class VideosScreen(CapabilityScreen):
             yield Button("Generate video", variant="primary", id="generate")
             yield Button("Sample prompt", id="sample")
             yield Button("Generate prompt", id="gen-prompt")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"

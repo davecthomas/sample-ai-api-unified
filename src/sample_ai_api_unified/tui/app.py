@@ -54,6 +54,7 @@ class SampleApp(App):
         ("c", "nav('completions')", "Completions"),
         ("e", "nav('embeddings')", "Embeddings"),
         ("p", "nav('providers')", "Providers"),
+        ("o", "toggle_obs", "Obs pane"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -81,6 +82,17 @@ class SampleApp(App):
 
     def action_nav(self, key: str) -> None:
         self.show_screen(key)
+
+    def action_toggle_obs(self) -> None:
+        """Expand/collapse the current screen's observability pane."""
+        from textual.css.query import NoMatches
+        from textual.widgets import Collapsible
+
+        try:
+            panel = self.query_one("#obs-panel", Collapsible)
+        except NoMatches:
+            return
+        panel.collapsed = not panel.collapsed
 
     def show_screen(self, key: str) -> None:
         content = self.query_one("#content", Container)

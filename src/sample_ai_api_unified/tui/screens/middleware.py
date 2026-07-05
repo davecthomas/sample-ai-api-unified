@@ -11,7 +11,7 @@ from dataclasses import replace
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Button, Label, Select, Static, Switch
+from textual.widgets import Button, Label, Select, Switch
 
 from ... import middleware_profile as mp
 from ... import obs, samples, state
@@ -29,7 +29,11 @@ def _select(options: tuple[str, ...], value: str, widget_id: str) -> Select:
 
 class MiddlewareScreen(CapabilityScreen):
     title_text = "Middleware"
-    subtitle_text = "Edit the observability + PII profile, then run the demos."
+    subtitle_text = "Changes apply immediately. Run the demos below."
+
+    # Widgets fire Changed events during initial mount; only persist real user
+    # edits, enabled once after the first refresh.
+    _autosave = False
 
     def compose_body(self) -> ComposeResult:
         profile = mp.read_profile()
@@ -56,13 +60,19 @@ class MiddlewareScreen(CapabilityScreen):
             yield _select(mp.DETECTION_PROFILES, profile.pii.detection_profile, "pii-profile")
 
         with Horizontal(classes="actions"):
-            yield Button("Save profile", variant="primary", id="save")
-            yield Button("PII demo", id="pii-demo")
+            yield Button("PII demo", variant="primary", id="pii-demo")
             yield Button("Observability demo", id="obs-demo")
-        yield Static("", classes="result-panel", id="result")
 
-    @on(Button.Pressed, "#save")
-    def _on_save(self) -> None:
+    def on_mount(self) -> None:
+        # The Switch/Select widgets emit Changed events while mounting; enable
+        # autosave only after the first refresh so those are not mistaken for
+        # user edits and do not rewrite the profile on load.
+        self.call_after_refresh(self._enable_autosave)
+
+    def _enable_autosave(self) -> None:
+        self._autosave = True
+
+    def _persist(self) -> mp.MiddlewareProfile:
         # Start from the on-disk profile and change only the fields the form
         # exposes, so settings edited elsewhere (capabilities, entities, …) are
         # preserved rather than reset to defaults.
@@ -82,8 +92,23 @@ class MiddlewareScreen(CapabilityScreen):
                 detection_profile=self.query_one("#pii-profile", Select).value,
             ),
         )
-        path = mp.write_profile(profile)
-        self.set_result("result", f"Profile written to {path}\nand AI_MIDDLEWARE_CONFIG_PATH set.")
+        mp.write_profile(profile)
+        return profile
+
+    @on(Switch.Changed)
+    @on(Select.Changed)
+    def _on_form_change(self) -> None:
+        # Apply every edit immediately so the profile the library reads always
+        # matches what the form shows — no separate Save step to forget.
+        if not self._autosave:
+            return
+        profile = self._persist()
+        obs_state = "on" if profile.observability.enabled else "off"
+        pii_state = "on" if profile.pii.enabled else "off"
+        self.set_result(
+            "result",
+            f"Applied. Observability {obs_state}, PII redaction {pii_state}.",
+        )
 
     @on(Button.Pressed, "#pii-demo")
     def _on_pii_demo(self) -> None:

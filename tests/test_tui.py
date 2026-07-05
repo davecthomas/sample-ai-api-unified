@@ -89,7 +89,8 @@ async def test_video_generate_prompts_for_confirmation(offline_env, monkeypatch)
         assert pilot.app.query("ConfirmModal")  # cost confirmation before any call
 
 
-async def test_middleware_save_writes_profile(offline_env, monkeypatch, tmp_path):
+async def test_middleware_edit_persists_immediately(offline_env, monkeypatch, tmp_path):
+    """Toggling a form control writes the profile without a separate Save step."""
     from sample_ai_api_unified import middleware_profile as mp
 
     yaml_path = tmp_path / "middleware.yaml"
@@ -99,19 +100,62 @@ async def test_middleware_save_writes_profile(offline_env, monkeypatch, tmp_path
     async with SampleApp().run_test(size=(120, 50)) as pilot:
         pilot.app.show_screen("middleware")
         await pilot.pause()
+        await pilot.pause()  # let call_after_refresh enable autosave
         screen = pilot.app.query_one("MiddlewareScreen")
         from textual.widgets import Switch
 
+        assert screen._autosave is True
         screen.query_one("#pii-enabled", Switch).value = True
-        await pilot.click("#save")
         await pilot.pause()
         assert yaml_path.exists()
-        profile = mp.read_profile(yaml_path)
-        assert profile.pii.enabled is True
+        assert mp.read_profile(yaml_path).pii.enabled is True
 
 
-async def test_middleware_save_preserves_unshown_fields(offline_env, monkeypatch, tmp_path):
-    """Saving from the form must not reset fields the form does not expose."""
+async def test_middleware_disable_pii_persists(offline_env, monkeypatch, tmp_path):
+    """Disabling PII redaction takes effect immediately (regression: the switch
+    used to persist only on a Save click, so a disabled switch was ignored)."""
+    from sample_ai_api_unified import middleware_profile as mp
+
+    yaml_path = tmp_path / "middleware.yaml"
+    monkeypatch.setattr(mp.paths, "MIDDLEWARE_YAML_PATH", yaml_path)
+    monkeypatch.setattr(mp.envfile, "set_env_values", lambda values: None)
+    mp.write_profile(mp.MiddlewareProfile(pii=mp.PiiProfile(enabled=True)), yaml_path)
+
+    async with SampleApp().run_test(size=(120, 50)) as pilot:
+        pilot.app.show_screen("middleware")
+        await pilot.pause()
+        await pilot.pause()
+        screen = pilot.app.query_one("MiddlewareScreen")
+        from textual.widgets import Switch
+
+        screen.query_one("#pii-enabled", Switch).value = False
+        await pilot.pause()
+        assert mp.read_profile(yaml_path).pii.enabled is False
+
+
+async def test_middleware_mount_does_not_rewrite(offline_env, monkeypatch, tmp_path):
+    """Widgets fire Changed events while mounting; those must not autosave and
+    clobber the on-disk profile before the user edits anything."""
+    from sample_ai_api_unified import middleware_profile as mp
+
+    yaml_path = tmp_path / "middleware.yaml"
+    monkeypatch.setattr(mp.paths, "MIDDLEWARE_YAML_PATH", yaml_path)
+    monkeypatch.setattr(mp.envfile, "set_env_values", lambda values: None)
+    original = mp.MiddlewareProfile(pii=mp.PiiProfile(enabled=True, redact_entities=("EMAIL",)))
+    mp.write_profile(original, yaml_path)
+    mtime = yaml_path.stat().st_mtime_ns
+
+    async with SampleApp().run_test(size=(120, 50)) as pilot:
+        pilot.app.show_screen("middleware")
+        await pilot.pause()
+        await pilot.pause()
+        # No edit made — the file must be byte-for-byte untouched.
+        assert yaml_path.stat().st_mtime_ns == mtime
+        assert mp.read_profile(yaml_path).pii.enabled is True
+
+
+async def test_middleware_edit_preserves_unshown_fields(offline_env, monkeypatch, tmp_path):
+    """Auto-applying an edit must not reset fields the form does not expose."""
     from sample_ai_api_unified import middleware_profile as mp
 
     yaml_path = tmp_path / "middleware.yaml"
@@ -123,9 +167,64 @@ async def test_middleware_save_preserves_unshown_fields(offline_env, monkeypatch
     async with SampleApp().run_test(size=(120, 50)) as pilot:
         pilot.app.show_screen("middleware")
         await pilot.pause()
-        await pilot.click("#save")
+        await pilot.pause()
+        screen = pilot.app.query_one("MiddlewareScreen")
+        from textual.widgets import Switch
+
+        screen.query_one("#pii-strict", Switch).value = True  # trigger an autosave
         await pilot.pause()
         assert mp.read_profile(yaml_path).pii.redact_entities == ("EMAIL",)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "completions",
+        "structured",
+        "embeddings",
+        "images",
+        "videos",
+        "voice",
+        "middleware",
+        "providers",
+    ],
+)
+async def test_result_region_and_collapsed_obs_on_every_screen(offline_env, key):
+    from textual.widgets import Collapsible
+
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen(key)
+        await pilot.pause()
+        screen = pilot.app.query_one(
+            f"{key.capitalize() if key != 'providers' else 'Providers'}Screen"
+        )
+        # The base owns a single scrollable result region below the controls.
+        assert screen.query_one("#result", Static) is not None
+        # Observability lives in a Collapsible that starts collapsed.
+        obs_panel = screen.query_one("#obs-panel", Collapsible)
+        assert obs_panel.collapsed is True
+
+
+async def test_obs_toggle_binding_expands_and_collapses(offline_env):
+    from textual.widgets import Collapsible
+
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        panel = pilot.app.query_one("#obs-panel", Collapsible)
+        assert panel.collapsed is True
+        await pilot.press("o")
+        await pilot.pause()
+        assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is False
+        await pilot.press("o")
+        await pilot.pause()
+        assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is True
+
+
+async def test_set_result_updates_result_region(offline_env):
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.set_result("result", "a long response body")
+        await pilot.pause()
+        assert "a long response body" in str(screen.query_one("#result", Static).renderable)
 
 
 async def test_readiness_gating(offline_env, monkeypatch):

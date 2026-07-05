@@ -30,7 +30,6 @@ class EmbeddingsScreen(CapabilityScreen):
             yield Button("Similarity pair", id="similarity")
             yield Button("Multimodal", id="multimodal")
             yield Button("Capabilities", id="caps")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"

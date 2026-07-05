@@ -46,7 +46,6 @@ class ImagesScreen(CapabilityScreen):
             yield Button("Generate image", variant="primary", id="generate")
             yield Button("Sample prompt", id="sample")
             yield Button("Generate prompt", id="gen-prompt")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"

@@ -1,8 +1,9 @@
 """Base class for capability screens.
 
-Provides the shared layout (title, body, docked observability pane) and helpers
-for running blocking provider calls off the UI thread and reporting results. A
-subclass fills in ``compose_body`` and its own actions.
+Layout, top to bottom: title, subtitle, the screen's controls (inputs and
+action buttons), a response region that fills the remaining height and scrolls,
+and a collapsible observability pane. A subclass fills in ``compose_body`` with
+its controls only; the base owns the response region and the observability pane.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from typing import Any, Callable
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
 from textual.css.query import NoMatches
-from textual.widgets import Label, Static
+from textual.widgets import Collapsible, Label, Static
 from textual.worker import WorkerFailed
 
 from ..widgets import ObservabilityLog
@@ -30,13 +31,22 @@ class CapabilityScreen(Vertical):
         yield Label(self.title_text, classes="screen-title")
         if self.subtitle_text:
             yield Label(self.subtitle_text, classes="screen-subtitle", id="subtitle")
-        with VerticalScroll(id="body"):
-            yield from self.compose_body()
-        yield Label("Observability events", id="obs-title")
-        yield ObservabilityLog()
+        # Controls sit at natural height directly under the header.
+        yield from self.compose_body()
+        # The response fills the remaining height and scrolls on its own.
+        with VerticalScroll(id="result-scroll"):
+            yield Static("", id="result")
+        # Observability starts collapsed so the response gets the space; toggle
+        # with the "o" key binding or by clicking the header.
+        with Collapsible(title="Observability events", collapsed=True, id="obs-panel"):
+            yield ObservabilityLog()
 
     def compose_body(self) -> ComposeResult:
-        """Override to supply the screen's inputs, buttons, and result panels."""
+        """Override to supply the screen's inputs and action buttons only.
+
+        The base provides the ``#result`` region below the controls, so
+        subclasses must not yield their own result widget.
+        """
         yield Static("")
 
     # ── shared helpers ───────────────────────────────────────────────
