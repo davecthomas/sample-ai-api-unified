@@ -71,6 +71,7 @@ class SampleApp(App):
         envfile.ensure_env_file()
         envfile.reload_env()
         obs.install()
+        self._log_path = obs.enable_file_logging()
         self.show_screen("completions")
 
     # ── navigation ───────────────────────────────────────────────────

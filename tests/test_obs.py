@@ -56,3 +56,39 @@ def test_events_since_survives_buffer_wraparound():
 def test_events_since_empty_when_nothing_new():
     marker = obs.event_count()
     assert obs.events_since(marker) == []
+
+
+def test_enable_file_logging_writes_events_to_a_dated_file(tmp_path):
+    obs._file_handler = None  # reset the module-level guard for the test
+    try:
+        log_path = obs.enable_file_logging(tmp_path)
+        assert log_path.parent == tmp_path
+        assert log_path.name.startswith("observability-")
+        logging.getLogger(obs.OBSERVABILITY_LOGGERS[0]).info("ai_api_call_input {sample}")
+        obs._file_handler.flush()
+        contents = log_path.read_text()
+        assert "ai_api_call_input" in contents
+        assert "File logging enabled" in contents  # startup marker recorded too
+    finally:
+        if obs._file_handler is not None:
+            for name in obs._FILE_LOGGERS:
+                logging.getLogger(name).removeHandler(obs._file_handler)
+            obs._file_handler.close()
+            obs._file_handler = None
+
+
+def test_enable_file_logging_is_idempotent(tmp_path):
+    obs._file_handler = None
+    try:
+        first = obs.enable_file_logging(tmp_path)
+        second = obs.enable_file_logging(tmp_path)
+        assert first == second
+        # Only one handler was attached despite two calls.
+        logger = logging.getLogger(obs.OBSERVABILITY_LOGGERS[0])
+        assert logger.handlers.count(obs._file_handler) == 1
+    finally:
+        if obs._file_handler is not None:
+            for name in obs._FILE_LOGGERS:
+                logging.getLogger(name).removeHandler(obs._file_handler)
+            obs._file_handler.close()
+            obs._file_handler = None

@@ -7,9 +7,33 @@ persists), then let the next factory call pick it up.
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 from . import catalog, envfile
+
+
+@contextlib.contextmanager
+def temp_env(**overrides: str):
+    """Apply env-var overrides for the duration of a call, then restore them.
+
+    Used to run a Google call that needs api-key auth (e.g. video download via
+    the Files API, or multimodal media embeddings) under a temporary config
+    without persisting anything to ``.env``, so a cancelled or failed call never
+    changes the user's saved defaults. The library reads these from the
+    environment on each factory call. (Single-user app: the override is
+    process-global for the call's duration, which is fine here.)
+    """
+    previous = {name: os.environ.get(name) for name in overrides}
+    os.environ.update(overrides)
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def current_engine(capability_key: str) -> str:

@@ -178,6 +178,20 @@ library expects to `config/middleware.yaml`, and points
   models are not published on Vertex. The catalog lists only GA Veo models, and
   the video screen heals a stale `VIDEO_MODEL_NAME` (persisted from an older
   build, or the library's own preview default) to a GA model before the call.
+- **`This method is only supported in the Gemini Developer client` (video)**:
+  Google video downloads its result through the google-genai Files API, which
+  works only in the Developer (api-key) client; the Vertex (service-account)
+  client does not support it. Under `service_account`, the video screen runs the call with a
+  temporary `api_key` override when `GOOGLE_GEMINI_API_KEY` is set (your
+  `GOOGLE_AUTH_METHOD` is restored afterward); with no key set it says so.
+
+## Logs
+
+The app writes a datestamped observability log to `./logs/observability-<date>.log`
+(gitignored) each session. It captures the middleware's observability events plus
+the library's own INFO/ERROR output, so a failed call — a video download, a
+provider init error — can be inspected after the fact. The path is also recorded
+as the first line in the observability pane.
 
 ## Development
 

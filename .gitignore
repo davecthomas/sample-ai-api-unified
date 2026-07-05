@@ -20,6 +20,7 @@ dist/
 generated_images/
 generated_videos/
 generated_frames/
+logs/
 config/middleware.yaml
 .DS_Store
 *.json
