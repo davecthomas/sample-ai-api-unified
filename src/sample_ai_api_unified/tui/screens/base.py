@@ -82,3 +82,24 @@ class CapabilityScreen(Vertical):
                 on_success(value)
 
         self.run_worker(runner(), exclusive=False, exit_on_error=False)
+
+    def generate_prompt(self, kind: str, fill: Callable[[str], None]) -> None:
+        """Generate a fresh prompt of ``kind`` via the completions API.
+
+        Generation uses the completions engine regardless of this screen's own
+        capability, so it gates on completions readiness and passes the result
+        to ``fill``.
+        """
+        if not self.app.ensure_capability_ready("completions"):  # type: ignore[attr-defined]
+            self.set_result(
+                "result",
+                "[yellow]Completions engine not configured (needed to generate prompts).[/yellow]",
+            )
+            return
+        from ... import promptgen
+
+        self.run_blocking(
+            lambda: promptgen.generate_prompt(kind),
+            on_success=fill,
+            description="Generating a prompt via completions",
+        )

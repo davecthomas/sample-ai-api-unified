@@ -43,15 +43,20 @@ def test_current_engine_and_model_read_environment(monkeypatch):
     assert state.current_model("videos") == "sora-2-pro"
 
 
-def test_ensure_capability_ready_with_configured_provider(monkeypatch, captured_env):
+def test_capability_ready_with_configured_provider(monkeypatch):
     monkeypatch.setenv("COMPLETIONS_ENGINE", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    assert state.ensure_capability_ready("completions") is True
+    assert state.capability_ready("completions") is True
 
 
-def test_ensure_capability_ready_custom_engine_passes_through(monkeypatch):
+def test_capability_ready_false_without_engine(monkeypatch):
+    monkeypatch.delenv("COMPLETIONS_ENGINE", raising=False)
+    assert state.capability_ready("completions") is False
+
+
+def test_capability_ready_custom_engine_passes_through(monkeypatch):
     monkeypatch.setenv("COMPLETIONS_ENGINE", "some-future-engine")
-    assert state.ensure_capability_ready("completions") is True
+    assert state.capability_ready("completions") is True
 
 
 def test_voice_model_hidden_for_non_google_engines(monkeypatch):

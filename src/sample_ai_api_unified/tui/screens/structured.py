@@ -10,7 +10,7 @@ from textual.containers import Horizontal
 from textual.widgets import Button, Static
 
 from ... import state
-from ...demos.structured import contact_extraction_class, trip_plan_class
+from ...structured_schemas import contact_extraction_class, trip_plan_class
 from .base import CapabilityScreen
 
 CAPABILITY = "completions"
@@ -20,11 +20,16 @@ class StructuredScreen(CapabilityScreen):
     title_text = "Structured responses"
     subtitle_text = "Schema-validated output via AIStructuredPrompt.strict_schema_prompt."
 
+    # Optional generated source text for contact extraction; None uses the
+    # built-in example.
+    _source_text: str | None = None
+
     def compose_body(self) -> ComposeResult:
         yield Static("", classes="field-label", id="engine-line")
         with Horizontal(classes="actions"):
             yield Button("Contact extraction", variant="primary", id="contact")
             yield Button("Trip plan", id="trip")
+            yield Button("Generate source text", id="generate")
             yield Button("Token-limit guard", id="limit")
         yield Static("", classes="result-panel", id="result")
 
@@ -41,17 +46,20 @@ class StructuredScreen(CapabilityScreen):
     def _run(self, response_class) -> None:
         if not self._ready():
             return
+        prompt = response_class.get_prompt()
 
         def call() -> str:
             from ai_api_unified import AIFactory
 
             client = AIFactory.get_ai_completions_client()
             result = client.strict_schema_prompt(
-                prompt=response_class.get_prompt(),
+                prompt=prompt,
                 response_model=response_class,
                 max_response_tokens=2048,
             )
-            return json.dumps(result.model_dump(exclude={"prompt"}), indent=2)
+            payload = json.dumps(result.model_dump(exclude={"prompt"}), indent=2)
+            # Show the exact prompt sent alongside the validated response.
+            return f"Prompt:\n{prompt}\n\nValidated response:\n{payload}"
 
         self.run_blocking(
             call,
@@ -61,11 +69,22 @@ class StructuredScreen(CapabilityScreen):
 
     @on(Button.Pressed, "#contact")
     def _on_contact(self) -> None:
-        self._run(contact_extraction_class())
+        self._run(contact_extraction_class(self._source_text))
 
     @on(Button.Pressed, "#trip")
     def _on_trip(self) -> None:
         self._run(trip_plan_class())
+
+    @on(Button.Pressed, "#generate")
+    def _on_generate(self) -> None:
+        def fill(text: str) -> None:
+            self._source_text = text
+            self.set_result(
+                "result",
+                f"Generated source text (contact extraction will use it):\n\n{text}",
+            )
+
+        self.generate_prompt("structured_text", fill)
 
     @on(Button.Pressed, "#limit")
     def _on_limit(self) -> None:

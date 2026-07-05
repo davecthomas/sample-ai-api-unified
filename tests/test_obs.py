@@ -1,10 +1,10 @@
-"""Observability capture and the threaded call runner."""
+"""Observability event capture."""
 
 import logging
 
 import pytest
 
-from sample_ai_api_unified import obs, runner
+from sample_ai_api_unified import obs
 
 
 @pytest.fixture(autouse=True)
@@ -40,27 +40,6 @@ def test_install_is_idempotent():
     obs.install()
     obs.install()
     assert len(logger.handlers) == handler_count
-
-
-def test_run_call_returns_result():
-    assert runner.run_call("adding", lambda: 2 + 3) == 5
-
-
-def test_run_call_reraises_worker_exception():
-    def boom():
-        raise ValueError("worker failed")
-
-    with pytest.raises(ValueError, match="worker failed"):
-        runner.run_call("failing", boom)
-
-
-def test_run_call_reports_new_events(capsys):
-    def emits():
-        logging.getLogger(obs.OBSERVABILITY_LOGGERS[0]).info("ai_api_call_output {...}")
-        return "done"
-
-    assert runner.run_call("emitting", emits) == "done"
-    assert "Observability events" in capsys.readouterr().out
 
 
 def test_events_since_survives_buffer_wraparound():

@@ -13,7 +13,7 @@ POETRY ?= poetry
 PIP := $(POETRY) run pip
 
 .PHONY: help venv env setup setup-local setup-pypi use-local use-pypi run run-local run-pypi \
-	run-classic which spacy-model assets test lint format clean
+	which spacy-model assets test lint format clean
 
 help:
 	@echo "Targets:"
@@ -23,7 +23,6 @@ help:
 	@echo "  run          alias for run-local (launches the Textual TUI)"
 	@echo "  run-local    ensure local editable install, then launch the Textual TUI"
 	@echo "  run-pypi     upgrade to latest PyPI release, then launch the Textual TUI"
-	@echo "  run-classic  launch the classic Rich menu app"
 	@echo "  which        show which ai_api_unified source and version is active"
 	@echo "  env          copy .env from the local library checkout if missing"
 	@echo "  assets       regenerate the bundled sample images"
@@ -69,9 +68,6 @@ run-local: use-local
 
 run-pypi: use-pypi
 	$(POETRY) run python -m sample_ai_api_unified
-
-run-classic: use-local
-	$(POETRY) run python -m sample_ai_api_unified.app
 
 which:
 	@$(POETRY) run python -c "import ai_api_unified, pathlib; \

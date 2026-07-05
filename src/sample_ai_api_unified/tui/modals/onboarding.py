@@ -1,7 +1,6 @@
 """Modal that collects a provider's missing credentials and saves them to .env.
 
-Mirrors the classic onboarding flow (onboarding.ensure_provider_ready) but as a
-form: one input per required env key, honoring Google's service-account mode via
+One input per required env key, honoring Google's service-account mode via
 catalog.required_env_keys. Dismisses True when the provider becomes ready.
 """
 

@@ -8,7 +8,7 @@ from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
 from ... import audio, samples, state
-from ...demos.voice import audio_format_for, voice_client
+from ...voice_util import audio_format_for, voice_client
 from ..modals import ChoiceModal
 from .base import CapabilityScreen
 
@@ -35,6 +35,8 @@ class VoiceScreen(CapabilityScreen):
         with Horizontal(classes="actions"):
             yield Button("Speak", variant="primary", id="speak")
             yield Button("Sample sentence", id="sample")
+            yield Button("Generate sentence", id="gen-prompt")
+        with Horizontal(classes="actions"):
             yield Button("Pick voice", id="voice")
             yield Button("STT roundtrip", id="stt")
         yield Static("", classes="result-panel", id="result")
@@ -65,7 +67,7 @@ class VoiceScreen(CapabilityScreen):
             )
             audio.play_audio(audio_bytes)
             name = voice.voice_name if voice else "default"
-            return f"Played {len(audio_bytes):,} bytes via {engine} ({name})."
+            return f"Spoken:\n{text}\n\nPlayed {len(audio_bytes):,} bytes via {engine} ({name})."
 
         self.run_blocking(
             call,
@@ -80,6 +82,14 @@ class VoiceScreen(CapabilityScreen):
     @on(Input.Submitted, "#text")
     def _on_submit(self) -> None:
         self._speak(self.query_one("#text", Input).value)
+
+    @on(Button.Pressed, "#gen-prompt")
+    def _on_gen_prompt(self) -> None:
+        def fill(text: str) -> None:
+            self.query_one("#text", Input).value = text
+            self.set_result("result", f"Generated sentence (press Speak to hear it):\n\n{text}")
+
+        self.generate_prompt("tts", fill)
 
     @on(Button.Pressed, "#sample")
     def _on_sample(self) -> None:

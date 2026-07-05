@@ -7,17 +7,15 @@ AI_MIDDLEWARE_CONFIG_PATH at the generated file. Nobody edits YAML by hand.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
-from . import envfile, paths, ui
+from . import envfile, paths
 
 DIRECTIONS = ("input_only", "output_only", "input_output")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-TOKEN_COUNT_MODES = ("provider_only", "provider_or_estimate", "none")
-OBSERVABILITY_CAPABILITIES = ("completions", "embeddings", "images", "videos", "tts")
 DETECTION_PROFILES = ("low_memory", "balanced", "high_accuracy")
 PII_ENTITIES = ("NAME", "PHONE", "EMAIL", "SSN", "ADDRESS", "DOB", "CC_LAST4")
 
@@ -140,122 +138,3 @@ def read_profile(path: Path | None = None) -> MiddlewareProfile:
                 ),
             )
     return MiddlewareProfile(observability=observability, pii=pii)
-
-
-def _edit_observability(observability: ObservabilityProfile) -> ObservabilityProfile:
-    while True:
-        picked = ui.choose(
-            "Observability settings",
-            [
-                ui.MenuOption(f"Enabled: {observability.enabled}", "enabled"),
-                ui.MenuOption(f"Direction: {observability.direction}", "direction"),
-                ui.MenuOption(
-                    f"Capabilities: {', '.join(observability.capabilities) or 'all'}",
-                    "capabilities",
-                ),
-                ui.MenuOption(f"Log level: {observability.log_level}", "log_level"),
-                ui.MenuOption(f"Token counting: {observability.token_count_mode}", "tokens"),
-                ui.MenuOption(f"Emit error events: {observability.emit_error_events}", "errors"),
-            ],
-            back_label="Done",
-        )
-        if picked is None:
-            return observability
-        if picked.value == "enabled":
-            observability = replace(observability, enabled=not observability.enabled)
-        elif picked.value == "direction":
-            choice = ui.choose_value("Direction", DIRECTIONS)
-            if choice:
-                observability = replace(observability, direction=choice)
-        elif picked.value == "capabilities":
-            selected = ui.multi_toggle(
-                "Capabilities (none selected = all)",
-                OBSERVABILITY_CAPABILITIES,
-                set(observability.capabilities),
-            )
-            ordered = tuple(c for c in OBSERVABILITY_CAPABILITIES if c in selected)
-            observability = replace(observability, capabilities=ordered)
-        elif picked.value == "log_level":
-            choice = ui.choose_value("Log level", LOG_LEVELS)
-            if choice:
-                observability = replace(observability, log_level=choice)
-        elif picked.value == "tokens":
-            choice = ui.choose_value("Token count mode", TOKEN_COUNT_MODES)
-            if choice:
-                observability = replace(observability, token_count_mode=choice)
-        elif picked.value == "errors":
-            observability = replace(
-                observability, emit_error_events=not observability.emit_error_events
-            )
-
-
-def _edit_pii(pii: PiiProfile) -> PiiProfile:
-    while True:
-        picked = ui.choose(
-            "PII redaction settings",
-            [
-                ui.MenuOption(f"Enabled: {pii.enabled}", "enabled"),
-                ui.MenuOption(f"Direction: {pii.direction}", "direction"),
-                ui.MenuOption(f"Strict mode (fail closed): {pii.strict_mode}", "strict"),
-                ui.MenuOption(f"Detection profile: {pii.detection_profile}", "profile"),
-                ui.MenuOption(f"Redaction label: {pii.default_redaction_label}", "label"),
-                ui.MenuOption(f"Redact: {', '.join(pii.redact_entities) or 'nothing'}", "entities"),
-            ],
-            back_label="Done",
-        )
-        if picked is None:
-            return pii
-        if picked.value == "enabled":
-            pii = replace(pii, enabled=not pii.enabled)
-        elif picked.value == "direction":
-            choice = ui.choose_value("Direction", DIRECTIONS)
-            if choice:
-                pii = replace(pii, direction=choice)
-        elif picked.value == "strict":
-            pii = replace(pii, strict_mode=not pii.strict_mode)
-        elif picked.value == "profile":
-            choice = ui.choose_value("Detection profile", DETECTION_PROFILES)
-            if choice:
-                if choice == "high_accuracy":
-                    ui.warn(
-                        "high_accuracy needs the en_core_web_lg spaCy model "
-                        "(poetry run python -m spacy download en_core_web_lg)."
-                    )
-                pii = replace(pii, detection_profile=choice)
-        elif picked.value == "label":
-            label = ui.ask("Redaction label", default=pii.default_redaction_label)
-            if label:
-                pii = replace(pii, default_redaction_label=label)
-        elif picked.value == "entities":
-            selected = ui.multi_toggle("Entities to redact", PII_ENTITIES, set(pii.redact_entities))
-            ordered = tuple(e for e in PII_ENTITIES if e in selected)
-            pii = replace(pii, redact_entities=ordered)
-
-
-def edit_profile() -> MiddlewareProfile:
-    """Full profile editor loop; saves and applies on exit."""
-    profile = read_profile()
-    while True:
-        picked = ui.choose(
-            "Middleware profile editor",
-            [
-                ui.MenuOption(
-                    f"Observability ({'on' if profile.observability.enabled else 'off'})",
-                    "observability",
-                ),
-                ui.MenuOption(f"PII redaction ({'on' if profile.pii.enabled else 'off'})", "pii"),
-                ui.MenuOption("Save and apply", "save"),
-            ],
-            back_label="Cancel",
-        )
-        if picked is None:
-            ui.warn("Profile changes discarded.")
-            return read_profile()
-        if picked.value == "observability":
-            profile = replace(profile, observability=_edit_observability(profile.observability))
-        elif picked.value == "pii":
-            profile = replace(profile, pii=_edit_pii(profile.pii))
-        elif picked.value == "save":
-            path = write_profile(profile)
-            ui.success(f"Profile written to {path} and AI_MIDDLEWARE_CONFIG_PATH updated.")
-            return profile

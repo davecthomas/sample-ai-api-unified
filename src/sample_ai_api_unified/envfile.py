@@ -8,12 +8,15 @@ persist to ``.env`` and set ``os.environ`` so the change applies immediately.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 
 from dotenv import dotenv_values, load_dotenv, set_key
 
-from . import paths, ui
+from . import paths
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def ensure_env_file() -> None:
@@ -23,13 +26,13 @@ def ensure_env_file() -> None:
     library_env = paths.LOCAL_LIBRARY_DIR / ".env"
     if library_env.exists():
         shutil.copy(library_env, paths.ENV_PATH)
-        ui.success(f"Copied .env from {library_env}")
+        _LOGGER.info("Copied .env from %s", library_env)
     elif paths.ENV_TEMPLATE_PATH.exists():
         shutil.copy(paths.ENV_TEMPLATE_PATH, paths.ENV_PATH)
-        ui.warn("Created .env from env_template — no API keys are set yet.")
+        _LOGGER.info("Created .env from env_template; no API keys are set yet.")
     else:
         paths.ENV_PATH.touch()
-        ui.warn("Created an empty .env — no API keys are set yet.")
+        _LOGGER.info("Created an empty .env; no API keys are set yet.")
 
 
 def reload_env() -> None:
