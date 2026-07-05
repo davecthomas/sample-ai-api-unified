@@ -260,7 +260,13 @@ async def test_obs_demo_expands_the_pane(offline_env, monkeypatch, tmp_path):
         assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is False
 
 
-async def test_copy_result_copies_markup_free_error_text(offline_env):
+async def test_copy_result_copies_markup_free_error_text(offline_env, monkeypatch):
+    from sample_ai_api_unified import clipboard
+
+    captured = {}
+    monkeypatch.setattr(
+        clipboard, "copy_to_clipboard", lambda text: captured.update(text=text) or True
+    )
     async with SampleApp().run_test(size=(120, 44)) as pilot:
         screen = pilot.app.query_one("CompletionsScreen")
         screen.set_result("result", "[red]RuntimeError: 404 NOT_FOUND[/red]")
@@ -269,7 +275,59 @@ async def test_copy_result_copies_markup_free_error_text(offline_env):
         assert screen._last_result == "RuntimeError: 404 NOT_FOUND"
         await pilot.press("y")
         await pilot.pause()
-        assert pilot.app.clipboard == "RuntimeError: 404 NOT_FOUND"
+        # The system clipboard (pbcopy/xclip/…) receives the markup-free text.
+        assert captured["text"] == "RuntimeError: 404 NOT_FOUND"
+
+
+async def test_copy_result_falls_back_to_osc52(offline_env, monkeypatch):
+    from sample_ai_api_unified import clipboard
+
+    # No OS clipboard tool available → fall back to the terminal OSC 52 path.
+    monkeypatch.setattr(clipboard, "copy_to_clipboard", lambda text: False)
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.set_result("result", "boom")
+        await pilot.pause()
+        await pilot.press("y")
+        await pilot.pause()
+        assert pilot.app.clipboard == "boom"
+
+
+async def test_multimodal_warns_under_service_account(offline_env, monkeypatch):
+    # google-gemini embeddings must be configured for the multimodal path; give
+    # it a key, then set service-account auth, which cannot do media embeddings.
+    monkeypatch.setenv("GOOGLE_GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen("embeddings")
+        await pilot.pause()
+        screen = pilot.app.query_one("EmbeddingsScreen")
+        await pilot.click("#multimodal")
+        await pilot.pause()
+        result = str(screen.query_one("#result", Static).renderable)
+        assert "API-key auth" in result and "GOOGLE_AUTH_METHOD=api_key" in result
+
+
+async def test_videos_screen_heals_stale_model_on_mount(offline_env, monkeypatch):
+    import os
+
+    from sample_ai_api_unified import envfile
+
+    monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
+    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.1-lite-generate-preview")  # removed from catalog
+
+    def fake_set(values):
+        for name, value in values.items():
+            os.environ[name] = value
+
+    monkeypatch.setattr(envfile, "set_env_values", fake_set)
+
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen("videos")
+        await pilot.pause()
+        assert os.environ["VIDEO_MODEL_NAME"] == "veo-3.0-fast-generate-001"
+        line = str(pilot.app.query_one("VideosScreen").query_one("#engine-line", Static).renderable)
+        assert "veo-3.0-fast-generate-001" in line
 
 
 async def test_related_rank_needs_a_seed(offline_env):

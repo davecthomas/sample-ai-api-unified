@@ -210,6 +210,19 @@ class EmbeddingsScreen(CapabilityScreen):
         # Multimodal needs google-gemini + gemini-embedding-2. Confirm that
         # provider is configured before switching, so a failed attempt never
         # leaves the user's embeddings default silently changed in .env.
+        # The google-genai SDK only sends text parts to the Vertex embedContent
+        # endpoint, so multimodal embeddings with an image require API-key auth.
+        # This is the fundamental blocker under a service account, so check it
+        # before provider configuration and before any slow failing call.
+        if catalog.google_uses_service_account():
+            self.set_result(
+                "result",
+                "[yellow]Multimodal image embeddings need API-key auth: the "
+                "google-genai SDK sends only text to Vertex under a service "
+                "account. Set GOOGLE_AUTH_METHOD=api_key (with GOOGLE_GEMINI_API_KEY) "
+                "to run this demo.[/yellow]",
+            )
+            return
         provider = catalog.provider_for_engine(CAPABILITY, "google-gemini")
         if provider is not None and not catalog.provider_configured(provider):
             self.set_result(

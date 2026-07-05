@@ -76,7 +76,10 @@ Google supports two auth modes, selected by `GOOGLE_AUTH_METHOD`:
   service-account JSON key file (plus `GOOGLE_PROJECT_ID` and
   `GOOGLE_LOCATION`); `GOOGLE_GEMINI_API_KEY` is not used. This mode is
   required for Google **voice** — the Gemini TTS/STT endpoints reject API keys
-  and expect service-account credentials.
+  and expect service-account credentials. **Multimodal embeddings with an image
+  require `api_key` auth**: the google-genai SDK sends only text
+  parts to the Vertex `embedContent` endpoint under a service account, so the
+  embeddings screen surfaces that requirement before the call.
 
 The app recognizes both: in `service_account` mode Google reads as configured
 once the credentials file exists, without prompting for an API key. Keep the
@@ -129,7 +132,7 @@ engine option:
 | Completions | `openai` (GPT-5/4.1/o4/4o families), `google-gemini` (all nine Gemini spec models), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
 | Embeddings | `openai` (3 models), `google-gemini` (`gemini-embedding-001`, multimodal `gemini-embedding-2`), `titan` (v1, v2) |
 | Images | `openai` (`gpt-image-1`, DALL-E 2/3), `google-gemini` (Imagen 4 standard/fast/ultra, Gemini image models), `nova-canvas` |
-| Videos | `openai` (`sora-2`, `sora-2-pro`), `google-gemini` (all six Veo models), `nova-reel` |
+| Videos | `openai` (`sora-2`, `sora-2-pro`), `google-gemini` (GA Veo models: `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, `veo-2.0-generate-001`), `nova-reel` |
 | Voice | `openai`, `google` (Gemini TTS models), `azure`, `elevenlabs` |
 
 Every model menu also takes a custom model name, so new releases are usable
@@ -168,6 +171,10 @@ library expects to `config/middleware.yaml`, and points
   library ships a fix.
 - **Imagen or Veo failures on a fresh key**: image and video generation need
   a billing-enabled Google project; free-tier AI Studio keys may be rejected.
+- **`Publisher Model ... veo-3.1-*-preview is not found` (404)**: those preview
+  models are not published on Vertex. The catalog lists only GA Veo models, and
+  the video screen heals a stale `VIDEO_MODEL_NAME` (persisted from an older
+  build, or the library's own preview default) to a GA model before the call.
 
 ## Development
 

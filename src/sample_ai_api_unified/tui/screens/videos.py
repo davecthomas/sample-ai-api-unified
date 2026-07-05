@@ -34,6 +34,9 @@ class VideosScreen(CapabilityScreen):
             yield Button("Generate prompt", id="gen-prompt")
 
     def on_mount(self) -> None:
+        # Heal a stale/absent model so the display and the next call agree, and
+        # the library never falls back to its own (possibly 404) default.
+        state.ensure_supported_model(CAPABILITY)
         engine = state.current_engine(CAPABILITY) or "unset"
         model = state.current_model(CAPABILITY) or "provider default"
         self.query_one("#engine-line", Static).update(f"engine: {engine}   model: {model}")
@@ -54,6 +57,9 @@ class VideosScreen(CapabilityScreen):
 
     def _run(self, prompt: str) -> None:
         engine = state.current_engine(CAPABILITY)
+        # Make sure a valid model is persisted before the factory reads the env,
+        # so it does not fall back to the library's default (which may 404).
+        state.ensure_supported_model(CAPABILITY)
 
         def call() -> str:
             from ai_api_unified import AIBaseVideoProperties, AIFactory

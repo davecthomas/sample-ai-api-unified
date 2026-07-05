@@ -38,6 +38,30 @@ def set_model(capability_key: str, model: str) -> None:
     envfile.set_env_values({catalog.CAPABILITIES[capability_key].model_env: model})
 
 
+def ensure_supported_model(capability_key: str) -> str:
+    """Return the model in effect for the current engine, healing it first.
+
+    The library reads the model from the environment on every factory call and
+    falls back to its own default when the variable is unset — and that default
+    can be a model that no longer runs (e.g. a preview model Vertex 404s on). So
+    if the persisted model is unset or no longer listed in the catalog for the
+    current engine, write the engine's default to the environment and return it,
+    keeping the app authoritative. Custom engines (not in the catalog) are left
+    untouched.
+    """
+    selector = current_engine(capability_key)
+    if not selector:
+        return ""
+    engine = catalog.engine_for(capability_key, selector)
+    if engine is None or not engine.models or not engine.default_model:
+        return current_model(capability_key)  # custom/unknown engine — leave as-is
+    model = current_model(capability_key)
+    if model not in engine.models:
+        set_model(capability_key, engine.default_model)
+        return engine.default_model
+    return model
+
+
 def capability_ready(capability_key: str) -> bool:
     """True when an engine is selected and its provider has credentials.
 
