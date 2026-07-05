@@ -20,6 +20,7 @@ MIDDLEWARE_YAML_PATH = CONFIG_DIR / "middleware.yaml"
 IMAGES_OUTPUT_DIR = Path.cwd() / "generated_images"
 VIDEOS_OUTPUT_DIR = Path.cwd() / "generated_videos"
 FRAMES_OUTPUT_DIR = Path.cwd() / "generated_frames"
+LOGS_DIR = Path.cwd() / "logs"
 
 # Default location of the local library checkout, used to seed .env.
 LOCAL_LIBRARY_DIR = PROJECT_ROOT.parent / "ai_api_unified"

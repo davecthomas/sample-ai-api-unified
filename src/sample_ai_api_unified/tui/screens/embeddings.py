@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import os
 
 from textual import on
@@ -16,29 +15,6 @@ from .base import CapabilityScreen
 
 CAPABILITY = "embeddings"
 MULTIMODAL_MODEL = "gemini-embedding-2"
-
-
-@contextlib.contextmanager
-def _temp_env(**overrides: str):
-    """Apply env-var overrides for the duration of a call, then restore them.
-
-    Used to run the multimodal demo with the google-gemini engine, the
-    multimodal model, and (for service-account users who have a Gemini key)
-    api-key auth — without persisting any of it to ``.env``, so a cancelled or
-    failed demo never changes the user's saved defaults. The library reads these
-    from the environment on each factory call. (Single-user app: the override is
-    process-global for the call's duration, which is fine here.)
-    """
-    previous = {name: os.environ.get(name) for name in overrides}
-    os.environ.update(overrides)
-    try:
-        yield
-    finally:
-        for name, value in previous.items():
-            if value is None:
-                os.environ.pop(name, None)
-            else:
-                os.environ[name] = value
 
 
 class EmbeddingsScreen(CapabilityScreen):
@@ -285,7 +261,7 @@ class EmbeddingsScreen(CapabilityScreen):
                 overrides = {cap.engine_env: "google-gemini", cap.model_env: MULTIMODAL_MODEL}
                 if temp_api_key:
                     overrides["GOOGLE_AUTH_METHOD"] = "api_key"
-                with _temp_env(**overrides):
+                with state.temp_env(**overrides):
                     client = AIFactory.get_ai_embedding_client()
                     image_bytes = image_path.read_bytes()
                     params = AIEmbeddingsMultimodalParams(

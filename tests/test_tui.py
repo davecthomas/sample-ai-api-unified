@@ -23,6 +23,11 @@ def offline_env(monkeypatch, tmp_path):
     """Stop the app touching the real .env, and give a deterministic config."""
     monkeypatch.setattr(tui_app.envfile, "ensure_env_file", lambda: None)
     monkeypatch.setattr(tui_app.envfile, "reload_env", lambda: None)
+    # Don't create the real ./logs dir or attach a file handler during UI tests;
+    # obs.enable_file_logging is covered directly in test_obs.
+    monkeypatch.setattr(
+        tui_app.obs, "enable_file_logging", lambda *a, **k: tmp_path / "session.log"
+    )
     # Redirect any .env write (e.g. a model heal) to a throwaway file so no test
     # can mutate the developer's real .env in the repo root.
     from sample_ai_api_unified import paths
@@ -94,6 +99,48 @@ async def test_video_generate_prompts_for_confirmation(offline_env, monkeypatch)
         await pilot.click("#generate")
         await pilot.pause()
         assert pilot.app.query("ConfirmModal")  # cost confirmation before any call
+
+
+def _configured_service_account(monkeypatch, tmp_path):
+    """A service-account Google setup: auth mode plus an existing creds file."""
+    creds = tmp_path / "sa.json"
+    creds.write_text("{}")
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", str(creds))
+
+
+async def test_video_google_service_account_without_key_warns(offline_env, monkeypatch, tmp_path):
+    # Google video download needs the Files API (api-key auth); on a service
+    # account with no Gemini key there is nothing to switch to, so it warns and
+    # does not reach the cost confirmation.
+    monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
+    _configured_service_account(monkeypatch, tmp_path)
+    monkeypatch.delenv("GOOGLE_GEMINI_API_KEY", raising=False)
+    async with SampleApp().run_test() as pilot:
+        pilot.app.show_screen("videos")
+        await pilot.pause()
+        screen = pilot.app.query_one("VideosScreen")
+        screen.query_one("#prompt", Input).value = "a neon train at dusk"
+        await pilot.click("#generate")
+        await pilot.pause()
+        assert not pilot.app.query("ConfirmModal")  # never reaches the cost prompt
+        assert "Files API" in str(screen.query_one("#result", Static).renderable)
+
+
+async def test_video_google_service_account_with_key_proceeds(offline_env, monkeypatch, tmp_path):
+    # Service account plus a Gemini key: it proceeds to the cost confirmation
+    # (the call will run under a temporary api_key override).
+    monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
+    _configured_service_account(monkeypatch, tmp_path)
+    monkeypatch.setenv("GOOGLE_GEMINI_API_KEY", "test-key")
+    async with SampleApp().run_test() as pilot:
+        pilot.app.show_screen("videos")
+        await pilot.pause()
+        screen = pilot.app.query_one("VideosScreen")
+        screen.query_one("#prompt", Input).value = "a neon train at dusk"
+        await pilot.click("#generate")
+        await pilot.pause()
+        assert pilot.app.query("ConfirmModal")
 
 
 async def test_middleware_edit_persists_immediately(offline_env, monkeypatch, tmp_path):
@@ -331,29 +378,29 @@ async def test_multimodal_service_account_with_key_proceeds(offline_env, monkeyp
 
 
 def test_temp_env_restores_previous_value(monkeypatch):
-    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
+    from sample_ai_api_unified import state
 
     monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
-    with _temp_env(GOOGLE_AUTH_METHOD="api_key"):
+    with state.temp_env(GOOGLE_AUTH_METHOD="api_key"):
         assert os.environ["GOOGLE_AUTH_METHOD"] == "api_key"
     assert os.environ["GOOGLE_AUTH_METHOD"] == "service_account"
 
 
 def test_temp_env_restores_absent_key(monkeypatch):
-    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
+    from sample_ai_api_unified import state
 
     monkeypatch.delenv("EMBEDDING_MODEL_NAME", raising=False)
-    with _temp_env(EMBEDDING_MODEL_NAME="gemini-embedding-2"):
+    with state.temp_env(EMBEDDING_MODEL_NAME="gemini-embedding-2"):
         assert os.environ["EMBEDDING_MODEL_NAME"] == "gemini-embedding-2"
     assert "EMBEDDING_MODEL_NAME" not in os.environ
 
 
 def test_temp_env_restores_on_exception(monkeypatch):
-    from sample_ai_api_unified.tui.screens.embeddings import _temp_env
+    from sample_ai_api_unified import state
 
     monkeypatch.setenv("GOOGLE_AUTH_METHOD", "service_account")
     with pytest.raises(RuntimeError):
-        with _temp_env(GOOGLE_AUTH_METHOD="api_key"):
+        with state.temp_env(GOOGLE_AUTH_METHOD="api_key"):
             raise RuntimeError("boom")
     assert os.environ["GOOGLE_AUTH_METHOD"] == "service_account"  # restored on error
 

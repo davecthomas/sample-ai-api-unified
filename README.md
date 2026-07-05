@@ -68,25 +68,29 @@ to `.env`, and reloads.
 
 ### Google authentication
 
-Google supports two auth modes, selected by `GOOGLE_AUTH_METHOD`:
+Google has two auth modes, selected by `GOOGLE_AUTH_METHOD`. Set up whichever
+mode you use:
 
-- **`api_key`** (default) — set `GOOGLE_GEMINI_API_KEY`. Covers completions,
-  embeddings, images, and video.
+- **`api_key`** (default) — set `GOOGLE_GEMINI_API_KEY`.
 - **`service_account`** — set `GOOGLE_APPLICATION_CREDENTIALS` to a
-  service-account JSON key file (plus `GOOGLE_PROJECT_ID` and
-  `GOOGLE_LOCATION`); `GOOGLE_GEMINI_API_KEY` is not used. This mode is
-  required for Google **voice** — the Gemini TTS/STT endpoints reject API keys
-  and expect service-account credentials. **Multimodal embeddings with an image
-  require `api_key` auth**: the google-genai SDK sends only text parts to the
-  Vertex `embedContent` endpoint under a service account. When you run the
-  Multimodal demo under `service_account`, the embeddings screen temporarily
-  switches to `api_key` auth for that one call if a `GOOGLE_GEMINI_API_KEY` is
-  set (your `GOOGLE_AUTH_METHOD` is restored afterward); with no key set it
-  tells you what to configure.
+  service-account JSON key file (plus `GOOGLE_PROJECT_ID` and `GOOGLE_LOCATION`);
+  `GOOGLE_GEMINI_API_KEY` is then unused for auth.
 
-The app recognizes both: in `service_account` mode Google reads as configured
-once the credentials file exists, without prompting for an API key. Keep the
-JSON key file out of version control (`*.json` is gitignored).
+Which mode each Google capability requires (and the same table for every other
+provider's key requirements) is a library-level constraint, documented in the
+[`ai-api-unified` README's Google authentication section](https://github.com/davecthomas/ai-api-unified#readme).
+The short version: voice needs `service_account`, while multimodal-image
+embeddings and video-with-download need `api_key`.
+
+To reconcile that split, this app lets you keep `service_account` as your base
+(for voice) and also set a `GOOGLE_GEMINI_API_KEY`: the Multimodal and Video
+screens then run just those two calls under a temporary `api_key` override,
+restoring `GOOGLE_AUTH_METHOD` afterward. Nothing is persisted, so your saved
+defaults never change.
+
+The app recognizes both modes: in `service_account` mode Google reads as
+configured once the credentials file exists, without prompting for an API key.
+Keep the JSON key file out of version control (`*.json` is gitignored).
 
 ## Run
 
@@ -178,6 +182,19 @@ library expects to `config/middleware.yaml`, and points
   models are not published on Vertex. The catalog lists only GA Veo models, and
   the video screen heals a stale `VIDEO_MODEL_NAME` (persisted from an older
   build, or the library's own preview default) to a GA model before the call.
+- **`This method is only supported in the Gemini Developer client` (video)**:
+  Google video download needs `api_key` auth (see the library's Google
+  authentication section, linked above). Under `service_account`, the video
+  screen runs the call with a temporary `api_key` override when
+  `GOOGLE_GEMINI_API_KEY` is set (restored afterward); with no key set it says so.
+
+## Logs
+
+The app writes a datestamped observability log to `./logs/observability-<date>.log`
+(gitignored) each session. It captures the middleware's observability events plus
+the library's own INFO/ERROR output, so a failed call — a video download, a
+provider init error — can be inspected after the fact. The path is also recorded
+as the first line in the observability pane.
 
 ## Development
 
