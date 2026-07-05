@@ -44,3 +44,38 @@ def generate_prompt(kind: str) -> str:
     client = AIFactory.get_ai_completions_client()
     text = client.send_prompt(META_PROMPTS[kind])
     return text.strip().strip('"').strip()
+
+
+def _clean_line(line: str) -> str:
+    """Strip list numbering, bullets, and surrounding quotes from one line."""
+    line = line.strip()
+    # Drop a leading "1." / "1)" / "-" / "*" / "•" marker if present.
+    for marker in ("- ", "* ", "• "):
+        if line.startswith(marker):
+            line = line[len(marker) :]
+            break
+    else:
+        head, sep, rest = line.partition(" ")
+        if sep and head[:-1].isdigit() and head[-1] in ".)":
+            line = rest
+    return line.strip().strip('"').strip()
+
+
+def generate_related(seed: str, count: int = 5) -> list[str]:
+    """Return ``count`` short sentences related in topic to ``seed`` (blocking).
+
+    Used by the embeddings screen to build a set of topically-similar sentences
+    whose distance from the seed can then be scored by cosine similarity.
+    """
+    from ai_api_unified import AIFactory
+
+    prompt = (
+        f"Write exactly {count} short, natural sentences that are related in "
+        f'topic to this sentence: "{seed}". Vary how closely each one relates. '
+        "Reply with one sentence per line, no numbering, no quotes, no blank lines."
+    )
+    client = AIFactory.get_ai_completions_client()
+    text = client.send_prompt(prompt)
+    lines = [_clean_line(line) for line in text.splitlines()]
+    sentences = [line for line in lines if line]
+    return sentences[:count]

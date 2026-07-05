@@ -5,10 +5,14 @@ A **Textual full-screen TUI** that exercises every capability of
 calls. Use it to explore the library, compare providers and models, and see
 the middleware system at work.
 
-The TUI has sidebar navigation, a docked live observability pane, and modal
+The TUI has sidebar navigation, a collapsible observability pane, and modal
 dialogs, with a screen for each capability: completions, structured responses,
 embeddings, image generation, video generation, voice, middleware, and
-providers/config.
+providers/config. On every screen the controls sit at the top, the primary
+action button sits directly below the input it acts on, and the response fills
+the rest of the height in its own scrollable region so long completions are
+never clipped. The observability pane collapses by default (toggle with `o`) to
+keep that space for the response.
 
 ## What it covers
 
@@ -31,6 +35,12 @@ have a **Generate** button that uses the completions API to write a fresh
 sample prompt (or, for structured, a fresh source text). Every screen also
 shows the exact prompt sent to the provider alongside its result — the
 structured screen displays the full `strict_schema_prompt` text.
+
+The embeddings screen's **Related & rank** button ties the two capabilities
+together: enter a phrase (e.g. "dogs like to sniff things"), and the completions
+model writes five topically related sentences, each is embedded, and the screen
+lists them ranked by cosine similarity to your phrase — a hands-on view of what
+embedding distance measures.
 
 ## Requirements
 
@@ -90,13 +100,16 @@ The local checkout path defaults to `../ai_api_unified`; override with
 | `c` | Completions screen |
 | `e` | Embeddings screen |
 | `p` | Providers & models screen |
+| `o` | Expand/collapse the observability pane |
+| `y` | Copy the current result (or error) to the clipboard |
 | `q` | Quit |
 | `Ctrl+P` | Command palette |
 
 Click a sidebar entry or use the keys above to switch screens. Buttons and list
 items respond to both mouse and keyboard. Long provider calls run on a
-background thread so the UI stays responsive, and the docked pane streams
-observability events when that middleware is enabled.
+background thread so the UI stays responsive, and the collapsible pane streams
+observability events when that middleware is enabled — press `o` (or click its
+header) to open it.
 
 ## Switching providers, models, and voices
 

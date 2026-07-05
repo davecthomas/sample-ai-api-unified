@@ -58,7 +58,6 @@ class CompletionsScreen(CapabilityScreen):
             yield Button("System prompt", id="system")
             yield Button("Describe image", id="describe")
             yield Button("Model info", id="info")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         self._refresh_engine_line()

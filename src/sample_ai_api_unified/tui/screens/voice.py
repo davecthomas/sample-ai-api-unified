@@ -39,7 +39,6 @@ class VoiceScreen(CapabilityScreen):
         with Horizontal(classes="actions"):
             yield Button("Pick voice", id="voice")
             yield Button("STT roundtrip", id="stt")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"

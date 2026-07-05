@@ -17,20 +17,20 @@ MULTIMODAL_MODEL = "gemini-embedding-2"
 
 class EmbeddingsScreen(CapabilityScreen):
     title_text = "Embeddings"
-    subtitle_text = "Embed text, run a batch, or compare two texts by cosine similarity."
+    subtitle_text = "Embed, batch, rank generated sentences by similarity, or compare two texts."
 
     def compose_body(self) -> ComposeResult:
         yield Static("", classes="field-label", id="engine-line")
-        yield Input(placeholder="Text to embed…", id="text")
+        yield Input(placeholder="A phrase, e.g. dogs like to sniff things…", id="text")
         with Horizontal(classes="actions"):
             yield Button("Embed", variant="primary", id="embed")
+            yield Button("Related & rank", id="related")
             yield Button("Sample text", id="sample")
-            yield Button("Batch", id="batch")
         with Horizontal(classes="actions"):
+            yield Button("Batch", id="batch")
             yield Button("Similarity pair", id="similarity")
             yield Button("Multimodal", id="multimodal")
             yield Button("Capabilities", id="caps")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"
@@ -83,6 +83,60 @@ class EmbeddingsScreen(CapabilityScreen):
                 self._embed(text)
 
         self.app.push_screen(ChoiceModal("Pick a sample text", options), chosen)
+
+    @on(Button.Pressed, "#related")
+    def _on_related(self) -> None:
+        seed = self.query_one("#text", Input).value.strip()
+        if not seed:
+            self.set_result("result", "[yellow]Enter a phrase first.[/yellow]")
+            return
+        # Generation uses the completions engine; ranking uses the embeddings
+        # engine. Both must be configured.
+        if not self.app.ensure_capability_ready("completions"):  # type: ignore[attr-defined]
+            self.set_result(
+                "result",
+                "[yellow]Completions engine not configured "
+                "(needed to generate related sentences).[/yellow]",
+            )
+            return
+        if not self._ready():
+            return
+
+        def call() -> str:
+            from ai_api_unified import AIFactory
+            from ai_api_unified.util import similarity_score
+
+            from ... import promptgen
+
+            sentences = promptgen.generate_related(seed, count=5)
+            if not sentences:
+                return "[yellow]The model returned no related sentences.[/yellow]"
+
+            client = AIFactory.get_ai_embedding_client()
+            seed_embedding = client.generate_embeddings(seed)
+            scored = [
+                (similarity_score(seed_embedding, client.generate_embeddings(sentence)), sentence)
+                for sentence in sentences
+            ]
+            scored.sort(key=lambda pair: pair[0], reverse=True)
+
+            lines = [
+                f'seed: "{seed}"',
+                f"engine: {state.current_engine(CAPABILITY)}   "
+                f"model: {state.current_model(CAPABILITY) or 'provider default'}",
+                "",
+                "Generated sentences ranked by cosine similarity to the seed:",
+                "",
+            ]
+            for score, sentence in scored:
+                lines.append(f"{score:.4f}  {sentence}")
+            return "\n".join(lines)
+
+        self.run_blocking(
+            call,
+            on_success=lambda text: self.set_result("result", text),
+            description="Generating related sentences and ranking by similarity",
+        )
 
     @on(Button.Pressed, "#batch")
     def _on_batch(self) -> None:

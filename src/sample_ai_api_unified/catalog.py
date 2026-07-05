@@ -265,7 +265,10 @@ CAPABILITIES: dict[str, Capability] = {
                     "veo-3.0-fast-generate-001",
                     "veo-2.0-generate-001",
                 ),
-                "veo-3.1-lite-generate-preview",
+                # The library's own DEFAULT_VIDEO_MODEL is a preview model that
+                # Vertex rejects with 404 (not a published model). Default to a
+                # GA model so video generation is runnable out of the box.
+                "veo-3.0-fast-generate-001",
             ),
             Engine(
                 "nova-reel",

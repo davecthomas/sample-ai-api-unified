@@ -31,7 +31,6 @@ class StructuredScreen(CapabilityScreen):
             yield Button("Trip plan", id="trip")
             yield Button("Generate source text", id="generate")
             yield Button("Token-limit guard", id="limit")
-        yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"

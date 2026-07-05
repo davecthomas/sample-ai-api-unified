@@ -54,6 +54,8 @@ class SampleApp(App):
         ("c", "nav('completions')", "Completions"),
         ("e", "nav('embeddings')", "Embeddings"),
         ("p", "nav('providers')", "Providers"),
+        ("o", "toggle_obs", "Obs pane"),
+        ("y", "copy_result", "Copy result"),
     ]
 
     def compose(self) -> ComposeResult:
@@ -81,6 +83,32 @@ class SampleApp(App):
 
     def action_nav(self, key: str) -> None:
         self.show_screen(key)
+
+    def action_toggle_obs(self) -> None:
+        """Expand/collapse the current screen's observability pane."""
+        from textual.css.query import NoMatches
+        from textual.widgets import Collapsible
+
+        try:
+            panel = self.query_one("#obs-panel", Collapsible)
+        except NoMatches:
+            return
+        panel.collapsed = not panel.collapsed
+
+    def action_copy_result(self) -> None:
+        """Copy the current screen's result text (errors included) to the clipboard."""
+        from textual.css.query import NoMatches
+
+        try:
+            screen = self.query_one("#content", Container).query_one(CapabilityScreen)
+        except NoMatches:
+            return
+        text = getattr(screen, "_last_result", "")
+        if text:
+            self.copy_to_clipboard(text)
+            self.notify("Copied result to the clipboard.")
+        else:
+            self.notify("Nothing to copy yet.", severity="warning")
 
     def show_screen(self, key: str) -> None:
         content = self.query_one("#content", Container)
