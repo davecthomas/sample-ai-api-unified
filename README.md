@@ -68,25 +68,36 @@ to `.env`, and reloads.
 
 ### Google authentication
 
-Google supports two auth modes, selected by `GOOGLE_AUTH_METHOD`:
+Google is the one provider with two auth modes, selected by `GOOGLE_AUTH_METHOD`,
+and different capabilities need different modes. Set up whichever mode you use:
 
-- **`api_key`** (default) — set `GOOGLE_GEMINI_API_KEY`. Covers completions,
-  embeddings, images, and video.
+- **`api_key`** (default) — set `GOOGLE_GEMINI_API_KEY`.
 - **`service_account`** — set `GOOGLE_APPLICATION_CREDENTIALS` to a
-  service-account JSON key file (plus `GOOGLE_PROJECT_ID` and
-  `GOOGLE_LOCATION`); `GOOGLE_GEMINI_API_KEY` is not used. This mode is
-  required for Google **voice** — the Gemini TTS/STT endpoints reject API keys
-  and expect service-account credentials. **Multimodal embeddings with an image
-  require `api_key` auth**: the google-genai SDK sends only text parts to the
-  Vertex `embedContent` endpoint under a service account. When you run the
-  Multimodal demo under `service_account`, the embeddings screen temporarily
-  switches to `api_key` auth for that one call if a `GOOGLE_GEMINI_API_KEY` is
-  set (your `GOOGLE_AUTH_METHOD` is restored afterward); with no key set it
-  tells you what to configure.
+  service-account JSON key file (plus `GOOGLE_PROJECT_ID` and `GOOGLE_LOCATION`);
+  `GOOGLE_GEMINI_API_KEY` is then unused for auth.
 
-The app recognizes both: in `service_account` mode Google reads as configured
-once the credentials file exists, without prompting for an API key. Keep the
-JSON key file out of version control (`*.json` is gitignored).
+Which mode each Google capability needs:
+
+| Google capability | `api_key` | `service_account` | If you're on the other mode |
+| --- | :---: | :---: | --- |
+| Completions | ✅ | ✅ | — |
+| Text embeddings | ✅ | ✅ | — |
+| Image generation (Imagen) | ✅ | ✅ | — |
+| Multimodal (image) embeddings | ✅ | ❌ | app runs the call under a temporary `api_key` override if `GOOGLE_GEMINI_API_KEY` is set |
+| Video generation (Veo, with download) | ✅ | ❌ | app runs the call under a temporary `api_key` override if `GOOGLE_GEMINI_API_KEY` is set |
+| Voice (TTS / STT) | ❌ | ✅ | switch to `service_account`; a Gemini key will not work |
+
+The awkward part: **voice needs `service_account`, but video download and
+multimodal-image embeddings need `api_key`** (both use google-genai features —
+Gemini TTS/STT auth, and the Files API / Vertex `embedContent` — that exist in
+only one client). So keep `service_account` as your base for voice, set a
+`GOOGLE_GEMINI_API_KEY` as well, and the app switches to `api_key` just for the
+two calls that require it, restoring `GOOGLE_AUTH_METHOD` afterward. Nothing is
+persisted, so your saved defaults never change.
+
+The app recognizes both modes: in `service_account` mode Google reads as
+configured once the credentials file exists, without prompting for an API key.
+Keep the JSON key file out of version control (`*.json` is gitignored).
 
 ## Run
 
