@@ -244,6 +244,29 @@ async def test_generate_prompt_fills_input(
         assert screen.query_one(input_id, Input).value == f"generated for {expected_kind}"
 
 
+async def test_multimodal_no_silent_engine_switch(offline_env, monkeypatch):
+    """Clicking Multimodal without google configured must not rewrite .env."""
+    from sample_ai_api_unified.tui.screens import embeddings as emb
+
+    monkeypatch.delenv("GOOGLE_GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_AUTH_METHOD", "api_key")
+    monkeypatch.setenv("EMBEDDING_ENGINE", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+    called = {}
+    monkeypatch.setattr(
+        emb.state, "set_engine", lambda *a, **k: called.setdefault("switched", True)
+    )
+
+    async with SampleApp().run_test(size=(140, 44)) as pilot:
+        pilot.app.show_screen("embeddings")
+        await pilot.pause()
+        screen = pilot.app.query_one("EmbeddingsScreen")
+        await pilot.click("#multimodal")
+        await pilot.pause()
+        assert "google-gemini configured" in str(screen.query_one("#result", Static).renderable)
+        assert "switched" not in called  # engine was not changed
+
+
 async def test_generate_prompt_needs_completions(offline_env, monkeypatch):
     """Generation gates on the completions engine, not the screen's own engine."""
     monkeypatch.delenv("COMPLETIONS_ENGINE", raising=False)

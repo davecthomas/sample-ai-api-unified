@@ -7,7 +7,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
-from ... import samples, state
+from ... import catalog, samples, state
 from ..modals import ChoiceModal
 from .base import CapabilityScreen
 
@@ -153,13 +153,22 @@ class EmbeddingsScreen(CapabilityScreen):
 
     @on(Button.Pressed, "#multimodal")
     def _on_multimodal(self) -> None:
+        # Multimodal needs google-gemini + gemini-embedding-2. Confirm that
+        # provider is configured before switching, so a failed attempt never
+        # leaves the user's embeddings default silently changed in .env.
+        provider = catalog.provider_for_engine(CAPABILITY, "google-gemini")
+        if provider is not None and not catalog.provider_configured(provider):
+            self.set_result(
+                "result",
+                "[yellow]Multimodal needs google-gemini configured "
+                "(set it up on the Providers screen).[/yellow]",
+            )
+            return
         engine = state.current_engine(CAPABILITY)
         model = state.current_model(CAPABILITY)
         if not (engine == "google-gemini" and model == MULTIMODAL_MODEL):
             state.set_engine(CAPABILITY, "google-gemini", MULTIMODAL_MODEL)
             self.on_mount()  # refresh the engine line
-        if not self._ready():
-            return
         images = samples.sample_image_paths()
         if not images:
             self.set_result("result", "[yellow]No bundled images found — run: make assets[/yellow]")

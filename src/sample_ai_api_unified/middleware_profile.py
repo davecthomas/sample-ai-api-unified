@@ -16,8 +16,6 @@ from . import envfile, paths
 
 DIRECTIONS = ("input_only", "output_only", "input_output")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
-TOKEN_COUNT_MODES = ("provider_only", "provider_or_estimate", "none")
-OBSERVABILITY_CAPABILITIES = ("completions", "embeddings", "images", "videos", "tts")
 DETECTION_PROFILES = ("low_memory", "balanced", "high_accuracy")
 PII_ENTITIES = ("NAME", "PHONE", "EMAIL", "SSN", "ADDRESS", "DOB", "CC_LAST4")
 

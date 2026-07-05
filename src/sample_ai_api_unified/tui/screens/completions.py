@@ -121,6 +121,11 @@ class CompletionsScreen(CapabilityScreen):
                 header += f"System prompt:\n{system_prompt}\n\n"
             if image_path:
                 header += f"Image: {image_path}\n\n"
+            if (system_prompt or image) and params is None:
+                header += (
+                    f"[note: engine {engine!r} has no system-prompt/image support here; "
+                    "sent the plain prompt]\n\n"
+                )
             header += f"Prompt:\n{user_prompt}\n\n"
             client = AIFactory.get_ai_completions_client()
             reply = (
