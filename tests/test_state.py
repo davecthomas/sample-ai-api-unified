@@ -67,25 +67,26 @@ def test_voice_model_hidden_for_non_google_engines(monkeypatch):
     assert state.current_model("voice") == "gemini-2.5-pro-tts"
 
 
-def test_ensure_supported_model_heals_unavailable_preview(captured_env, monkeypatch):
+def test_ensure_supported_model_heals_vertex_only_name(captured_env, monkeypatch):
     monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
-    # A model the library lists but Vertex 404s on (in UNAVAILABLE_MODELS).
-    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.1-lite-generate-preview")
-    assert state.ensure_supported_model("videos") == "veo-3.0-fast-generate-001"
-    assert captured_env["VIDEO_MODEL_NAME"] == "veo-3.0-fast-generate-001"
+    # A Vertex-only GA name (in UNAVAILABLE_MODELS): the Developer client the
+    # video path uses 404s on it, so it heals to the engine default.
+    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.0-fast-generate-001")
+    assert state.ensure_supported_model("videos") == "veo-3.1-lite-generate-preview"
+    assert captured_env["VIDEO_MODEL_NAME"] == "veo-3.1-lite-generate-preview"
 
 
 def test_ensure_supported_model_sets_default_when_unset(captured_env, monkeypatch):
     monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
     monkeypatch.delenv("VIDEO_MODEL_NAME", raising=False)
-    assert state.ensure_supported_model("videos") == "veo-3.0-fast-generate-001"
-    assert captured_env["VIDEO_MODEL_NAME"] == "veo-3.0-fast-generate-001"
+    assert state.ensure_supported_model("videos") == "veo-3.1-lite-generate-preview"
+    assert captured_env["VIDEO_MODEL_NAME"] == "veo-3.1-lite-generate-preview"
 
 
 def test_ensure_supported_model_keeps_a_valid_cataloged_model(captured_env, monkeypatch):
     monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
-    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-2.0-generate-001")
-    assert state.ensure_supported_model("videos") == "veo-2.0-generate-001"
+    monkeypatch.setenv("VIDEO_MODEL_NAME", "veo-3.1-fast-generate-preview")
+    assert state.ensure_supported_model("videos") == "veo-3.1-fast-generate-preview"
     assert "VIDEO_MODEL_NAME" not in captured_env  # no rewrite for a valid model
 
 

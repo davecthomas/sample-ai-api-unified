@@ -34,11 +34,7 @@ def test_default_models_match_library_defaults():
     openai_module = pytest.importorskip("ai_api_unified.videos.ai_openai_videos")
 
     google_videos = catalog.engine_for("videos", "google-gemini")
-    # The library's own DEFAULT_VIDEO_MODEL (veo-3.1-lite-generate-preview) is a
-    # preview model Vertex rejects with 404, so the catalog deliberately defaults
-    # to a GA model instead. Require only that the catalog default is a model the
-    # library actually supports, keeping the catalog within the library's set.
-    assert google_videos.default_model in google_module.AIGoogleGeminiVideos.SUPPORTED_VIDEO_MODELS
+    assert google_videos.default_model == google_module.AIGoogleGeminiVideos.DEFAULT_VIDEO_MODEL
     openai_videos = catalog.engine_for("videos", "openai")
     assert openai_videos.default_model == openai_module.AIOpenAIVideos.DEFAULT_VIDEO_MODEL
     assert set(openai_videos.models) == set(openai_module.AIOpenAIVideos.SUPPORTED_VIDEO_MODELS)

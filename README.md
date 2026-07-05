@@ -146,7 +146,7 @@ engine option:
 | Completions | `openai` (GPT-5/4.1/o4/4o families), `google-gemini` (all nine Gemini spec models), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
 | Embeddings | `openai` (3 models), `google-gemini` (`gemini-embedding-001`, multimodal `gemini-embedding-2`), `titan` (v1, v2) |
 | Images | `openai` (`gpt-image-1`, DALL-E 2/3), `google-gemini` (Imagen 4 standard/fast/ultra, Gemini image models), `nova-canvas` |
-| Videos | `openai` (`sora-2`, `sora-2-pro`), `google-gemini` (GA Veo models: `veo-3.0-generate-001`, `veo-3.0-fast-generate-001`, `veo-2.0-generate-001`), `nova-reel` |
+| Videos | `openai` (`sora-2`, `sora-2-pro`), `google-gemini` (Developer-API Veo models: `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`), `nova-reel` |
 | Voice | `openai`, `google` (Gemini TTS models), `azure`, `elevenlabs` |
 
 Every model menu also takes a custom model name, so new releases are usable
@@ -185,10 +185,13 @@ library expects to `config/middleware.yaml`, and points
   library ships a fix.
 - **Imagen or Veo failures on a fresh key**: image and video generation need
   a billing-enabled Google project; free-tier AI Studio keys may be rejected.
-- **`Publisher Model ... veo-3.1-*-preview is not found` (404)**: those preview
-  models are not published on Vertex. The catalog lists only GA Veo models, and
-  the video screen heals a stale `VIDEO_MODEL_NAME` (persisted from an older
-  build, or the library's own preview default) to a GA model before the call.
+- **`Model is not found: models/veo-...` (404)**: the two Google clients serve
+  different Veo catalogs — the Developer (api-key) client has the `veo-3.1-*`
+  preview family, while `veo-3.0-*`/`veo-2.0-*` GA names are Vertex-only. The
+  app's video path always calls through the Developer client (its download needs
+  the Files API), so the catalog lists the `veo-3.1-*` models and the video
+  screen heals a stale Vertex-only `VIDEO_MODEL_NAME` to the Developer-API
+  default before the call.
 - **`This method is only supported in the Gemini Developer client` (video)**:
   Google video download needs `api_key` auth (see the library's Google
   authentication section, linked above). Under `service_account`, the video
