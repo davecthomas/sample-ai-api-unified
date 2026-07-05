@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.markup import escape
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -45,13 +46,15 @@ def _prompt_params(engine: str, *, system_prompt=None, image=None, mime_type="im
 
 class CompletionsScreen(CapabilityScreen):
     title_text = "Completions"
-    subtitle_text = "Send prompts to the configured completions engine."
+    subtitle_text = "Send for a full reply, or Stream to watch the response arrive live."
 
     def compose_body(self) -> ComposeResult:
         yield Static("", classes="field-label", id="engine-line")
         yield Input(placeholder="Type a prompt, or use a sample below…", id="prompt")
         with Horizontal(classes="actions"):
             yield Button("Send", variant="primary", id="send")
+            yield Button("Stream", id="stream")
+        with Horizontal(classes="actions"):
             yield Button("Sample prompt", id="sample")
             yield Button("Generate prompt", id="generate")
         with Horizontal(classes="actions"):
@@ -80,7 +83,9 @@ class CompletionsScreen(CapabilityScreen):
 
             client = AIFactory.get_ai_completions_client()
             reply = client.send_prompt(prompt)
-            return f"Prompt:\n{prompt}\n\nResponse:\n{reply}"
+            # escape() so bracketed prompt/response text renders literally rather
+            # than being parsed as Rich markup.
+            return f"Prompt:\n{escape(prompt)}\n\nResponse:\n{escape(reply)}"
 
         self.run_blocking(
             call,
@@ -95,6 +100,42 @@ class CompletionsScreen(CapabilityScreen):
     @on(Input.Submitted, "#prompt")
     def _on_submit(self) -> None:
         self._send(self.query_one("#prompt", Input).value)
+
+    def _stream(self, prompt: str) -> None:
+        if not prompt.strip():
+            self.set_result("result", "[yellow]Enter a prompt first.[/yellow]")
+            return
+        if not self.app.ensure_capability_ready(CAPABILITY):  # type: ignore[attr-defined]
+            self.set_result("result", "[yellow]Engine not configured.[/yellow]")
+            return
+        # The library refuses to stream while PII redaction is on (redaction
+        # cannot be guaranteed across chunk boundaries). Check up front for a
+        # clear message instead of a mid-stream error.
+        from ... import middleware_profile as mp
+
+        if mp.read_profile().pii.enabled:
+            self.set_result(
+                "result",
+                "[yellow]Streaming is unavailable while PII redaction is enabled "
+                "(redaction can't span stream chunks). Disable it on the "
+                "Middleware screen to stream.[/yellow]",
+            )
+            return
+
+        def open_stream():
+            from ai_api_unified import AIFactory
+
+            return AIFactory.get_ai_completions_client().send_prompt_streaming(prompt)
+
+        self.run_streaming(
+            open_stream,
+            prefix=f"Prompt:\n{prompt}\n\nResponse:\n",
+            description=f"Streaming via {state.current_engine(CAPABILITY)}",
+        )
+
+    @on(Button.Pressed, "#stream")
+    def _on_stream(self) -> None:
+        self._stream(self.query_one("#prompt", Input).value)
 
     @on(Button.Pressed, "#generate")
     def _on_generate(self) -> None:
@@ -117,22 +158,22 @@ class CompletionsScreen(CapabilityScreen):
             params = _prompt_params(engine, system_prompt=system_prompt, image=image)
             header = ""
             if system_prompt:
-                header += f"System prompt:\n{system_prompt}\n\n"
+                header += f"System prompt:\n{escape(system_prompt)}\n\n"
             if image_path:
-                header += f"Image: {image_path}\n\n"
+                header += f"Image: {escape(str(image_path))}\n\n"
             if (system_prompt or image) and params is None:
                 header += (
-                    f"[note: engine {engine!r} has no system-prompt/image support here; "
-                    "sent the plain prompt]\n\n"
+                    f"(note: engine {engine!r} has no system-prompt/image support here; "
+                    "sent the plain prompt)\n\n"
                 )
-            header += f"Prompt:\n{user_prompt}\n\n"
+            header += f"Prompt:\n{escape(user_prompt)}\n\n"
             client = AIFactory.get_ai_completions_client()
             reply = (
                 client.send_prompt(user_prompt, other_params=params)
                 if params is not None
                 else client.send_prompt(user_prompt)
             )
-            return f"{header}Response:\n{reply}"
+            return f"{header}Response:\n{escape(reply)}"
 
         self.run_blocking(
             call,

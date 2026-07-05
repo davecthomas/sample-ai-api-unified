@@ -477,6 +477,140 @@ async def test_completions_unconfigured_engine_warns(offline_env, monkeypatch):
         assert "not configured" in str(screen.query_one("#result", Static).renderable)
 
 
+async def test_completions_stream_renders_chunks_live(offline_env, monkeypatch):
+    import ai_api_unified
+
+    from sample_ai_api_unified import middleware_profile as mp
+
+    # PII disabled so streaming is allowed.
+    monkeypatch.setattr(mp, "read_profile", lambda *a, **k: mp.MiddlewareProfile())
+
+    class _FakeStreamingClient:
+        # A chunk with Rich-markup-like brackets ([/INST]) must render literally,
+        # not abort the stream with a MarkupError.
+        def send_prompt_streaming(self, prompt, *, other_params=None):
+            return iter(["Use the ", "[/INST] ", "token."])
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory,
+        "get_ai_completions_client",
+        staticmethod(lambda: _FakeStreamingClient()),
+    )
+
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._stream("what does [/INST] mean?")  # bracketed prompt echo too
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        # _last_result is the markup-resolved plain text (what the user sees and
+        # can copy); the brackets survive because the text was escaped.
+        result = screen._last_result
+        assert "Use the [/INST] token." in result  # chunks accumulated, brackets intact
+        assert "what does [/INST] mean?" in result  # prompt echo intact
+        assert "streamed 3 chunks" in result  # completion summary
+
+
+async def test_completions_stream_button_is_wired(offline_env, monkeypatch):
+    """Clicking Stream reaches the handler (guards the @on wiring)."""
+    import ai_api_unified
+
+    from sample_ai_api_unified import middleware_profile as mp
+
+    monkeypatch.setattr(mp, "read_profile", lambda *a, **k: mp.MiddlewareProfile())
+
+    class _FakeStreamingClient:
+        def send_prompt_streaming(self, prompt, *, other_params=None):
+            return iter(["ok"])
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory,
+        "get_ai_completions_client",
+        staticmethod(lambda: _FakeStreamingClient()),
+    )
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        await pilot.pause()  # let the layout settle so the click hit-tests
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.query_one("#prompt", Input).value = "hi"
+        await pilot.click("#stream")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "streamed 1 chunks" in str(screen.query_one("#result", Static).renderable)
+
+
+async def test_completions_stream_blocked_when_pii_enabled(offline_env, monkeypatch):
+    from sample_ai_api_unified import middleware_profile as mp
+
+    monkeypatch.setattr(
+        mp, "read_profile", lambda *a, **k: mp.MiddlewareProfile(pii=mp.PiiProfile(enabled=True))
+    )
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._stream("hi")
+        await pilot.pause()
+        result = str(screen.query_one("#result", Static).renderable)
+        assert "PII redaction" in result and "Middleware screen" in result
+
+
+async def test_completions_stream_empty_prompt_warns(offline_env):
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._stream("")
+        await pilot.pause()
+        assert "Enter a prompt" in str(screen.query_one("#result", Static).renderable)
+
+
+async def test_completions_stream_error_is_shown_not_fatal(offline_env, monkeypatch):
+    import ai_api_unified
+
+    from sample_ai_api_unified import middleware_profile as mp
+
+    monkeypatch.setattr(mp, "read_profile", lambda *a, **k: mp.MiddlewareProfile())
+
+    class _BoomClient:
+        def send_prompt_streaming(self, prompt, *, other_params=None):
+            def gen():
+                yield "partial "
+                raise RuntimeError("stream broke")
+
+            return gen()
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory,
+        "get_ai_completions_client",
+        staticmethod(lambda: _BoomClient()),
+    )
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._stream("hi")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        result = str(screen.query_one("#result", Static).renderable)
+        assert "RuntimeError" in result and "stream broke" in result
+        assert pilot.app.query("CompletionsScreen")  # app still alive
+
+
+async def test_completions_send_renders_bracketed_reply(offline_env, monkeypatch):
+    """A non-streaming reply with bracket tokens must render literally, not crash."""
+    import ai_api_unified
+
+    class _FakeClient:
+        def send_prompt(self, prompt, *, other_params=None):
+            return "code: [/foo] and [bold]x"
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory,
+        "get_ai_completions_client",
+        staticmethod(lambda: _FakeClient()),
+    )
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._send("hi [/x]")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "[/foo]" in screen._last_result and "[bold]x" in screen._last_result
+        assert pilot.app.query("CompletionsScreen")  # rendered without aborting
+
+
 async def test_providers_tables_populate(offline_env):
     async with SampleApp().run_test() as pilot:
         pilot.app.show_screen("providers")
