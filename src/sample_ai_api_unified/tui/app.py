@@ -1,8 +1,7 @@
 """The Textual application: sidebar navigation plus a swappable content pane.
 
-Non-UI logic (catalog, state, envfile, onboarding, obs, samples) is shared with
-the classic Rich app. Every capability has a full Textual screen; the classic
-menu app remains available via ``make run-classic``.
+Every capability has a full Textual screen. Non-UI logic (catalog, state,
+envfile, onboarding, obs, samples, promptgen) lives in standalone modules.
 """
 
 from __future__ import annotations
@@ -12,7 +11,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import Footer, Label, ListItem, ListView
 
-from .. import catalog, envfile, obs, state
+from .. import envfile, obs, state
 from .screens.base import CapabilityScreen
 from .screens.completions import CompletionsScreen
 from .screens.embeddings import EmbeddingsScreen
@@ -102,13 +101,7 @@ class SampleApp(App):
     def ensure_capability_ready(self, capability_key: str) -> bool:
         """True when the capability's engine is selected and its provider has
         credentials. Onboarding itself happens on the Providers screen."""
-        selector = state.current_engine(capability_key)
-        if not selector:
-            return False
-        provider = catalog.provider_for_engine(capability_key, selector)
-        if provider is None:
-            return True  # custom selector; let the library validate it
-        return catalog.provider_configured(provider)
+        return state.capability_ready(capability_key)
 
 
 def main() -> None:

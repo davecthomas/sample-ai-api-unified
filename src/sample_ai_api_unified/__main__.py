@@ -1,8 +1,4 @@
-"""Default entry point launches the Textual TUI.
-
-Run the classic Rich menu app with ``python -m sample_ai_api_unified.app`` or
-``make run-classic``.
-"""
+"""Launch the Textual TUI: ``python -m sample_ai_api_unified``."""
 
 from .tui.app import main
 

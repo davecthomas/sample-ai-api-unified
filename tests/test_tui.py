@@ -204,6 +204,95 @@ async def test_worker_error_is_reported_not_fatal(offline_env):
         assert "RuntimeError" in text and "provider exploded" in text
 
 
+@pytest.mark.parametrize(
+    "key,screen_cls,input_id,expected_kind",
+    [
+        ("completions", "CompletionsScreen", "#prompt", "completion"),
+        ("images", "ImagesScreen", "#prompt", "image"),
+        ("videos", "VideosScreen", "#prompt", "video"),
+        ("voice", "VoiceScreen", "#text", "tts"),
+    ],
+)
+async def test_generate_prompt_fills_input(
+    offline_env, monkeypatch, key, screen_cls, input_id, expected_kind
+):
+    """The 'Generate prompt' button fills the input via the (stubbed) API."""
+    from sample_ai_api_unified import promptgen
+
+    seen = {}
+
+    def fake_generate(kind: str) -> str:
+        seen["kind"] = kind
+        return f"generated for {kind}"
+
+    monkeypatch.setattr(promptgen, "generate_prompt", fake_generate)
+    monkeypatch.setenv("IMAGE_ENGINE", "google-gemini")
+    monkeypatch.setenv("VIDEO_ENGINE", "google-gemini")
+    monkeypatch.setenv("AI_VOICE_ENGINE", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "x")
+
+    async with SampleApp().run_test(size=(140, 44)) as pilot:
+        pilot.app.show_screen(key)
+        await pilot.pause()
+        screen = pilot.app.query_one(screen_cls)
+        await pilot.click("#gen-prompt" if key != "completions" else "#generate")
+        for _ in range(40):
+            await pilot.pause(0.05)
+            if screen.query_one(input_id, Input).value:
+                break
+        assert seen["kind"] == expected_kind
+        assert screen.query_one(input_id, Input).value == f"generated for {expected_kind}"
+
+
+async def test_generate_prompt_needs_completions(offline_env, monkeypatch):
+    """Generation gates on the completions engine, not the screen's own engine."""
+    monkeypatch.delenv("COMPLETIONS_ENGINE", raising=False)
+    async with SampleApp().run_test() as pilot:
+        pilot.app.show_screen("completions")
+        await pilot.pause()
+        screen = pilot.app.query_one("CompletionsScreen")
+        await pilot.click("#generate")
+        await pilot.pause()
+        assert "not configured" in str(screen.query_one("#result", Static).renderable)
+
+
+async def test_structured_shows_full_prompt(offline_env, monkeypatch):
+    """The structured screen must surface the exact strict_schema_prompt text."""
+
+    captured = {}
+
+    class FakeResult:
+        def model_dump(self, exclude=None):
+            return {"name": "Ada"}
+
+    class FakeClient:
+        def strict_schema_prompt(self, *, prompt, response_model, max_response_tokens):
+            captured["prompt"] = prompt
+            return FakeResult()
+
+    import ai_api_unified
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory, "get_ai_completions_client", staticmethod(lambda: FakeClient())
+    )
+
+    async with SampleApp().run_test() as pilot:
+        pilot.app.show_screen("structured")
+        await pilot.pause()
+        screen = pilot.app.query_one("StructuredScreen")
+        await pilot.click("#contact")
+        rendered = ""
+        for _ in range(40):
+            await pilot.pause(0.05)
+            rendered = str(screen.query_one("#result", Static).renderable)
+            if "Prompt:" in rendered:
+                break
+        # the exact prompt sent is shown, and it is the schema's get_prompt()
+        assert "Prompt:" in rendered
+        assert captured["prompt"] in rendered
+        assert "Extract the person's name" in rendered
+
+
 async def test_onboarding_modal_saves_keys(offline_env, monkeypatch):
     from sample_ai_api_unified import catalog
     from sample_ai_api_unified.tui.modals import OnboardingModal

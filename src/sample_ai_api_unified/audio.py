@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from . import ui
+_LOGGER = logging.getLogger(__name__)
 
 
 def _sniff_extension(audio: bytes) -> str:
@@ -34,8 +35,8 @@ def _player_command(path: Path) -> list[str] | None:
 
 
 def play_audio(audio: bytes) -> None:
+    """Play audio through the OS default player; silent no-op if none is found."""
     if not audio:
-        ui.error("No audio bytes were returned.")
         return
     suffix = _sniff_extension(audio)
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
@@ -44,9 +45,8 @@ def play_audio(audio: bytes) -> None:
     try:
         command = _player_command(temp_path)
         if command is None:
-            ui.warn(f"No audio player found — audio left at {temp_path}")
+            _LOGGER.warning("No audio player found; audio left at %s", temp_path)
             return
-        ui.info(f"Playing {len(audio):,} bytes ({suffix.lstrip('.')})…")
         subprocess.run(command, check=False)
     finally:
         if _player_command(temp_path) is not None:

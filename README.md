@@ -1,19 +1,14 @@
 # sample-ai-api-unified
 
-A console app that exercises every capability of
+A **Textual full-screen TUI** that exercises every capability of
 [`ai-api-unified`](https://pypi.org/project/ai-api-unified/) with real provider
 calls. Use it to explore the library, compare providers and models, and see
 the middleware system at work.
 
-It ships two front ends over the same shared logic:
-
-- a **Textual full-screen TUI** (default `make run`) with sidebar navigation, a
-  docked live observability pane, and modal dialogs;
-- the original **Rich menu app** (`make run-classic`).
-
-The TUI covers every capability: completions, structured responses, embeddings,
-image generation, video generation, voice, middleware, and providers/config.
-The classic Rich app remains available for the same features.
+The TUI has sidebar navigation, a docked live observability pane, and modal
+dialogs, with a screen for each capability: completions, structured responses,
+embeddings, image generation, video generation, voice, middleware, and
+providers/config.
 
 ## What it covers
 
@@ -25,11 +20,17 @@ The classic Rich app remains available for the same features.
 | Image generation | `generate_images` with per-provider properties (aspect ratio, size) |
 | Video generation | Blocking `generate_video`, explicit submit/poll/download job control, frame extraction |
 | Voice | TTS through your speakers with per-provider voice pickers, speech-to-text roundtrip |
-| Middleware | Profile editor that generates the YAML config (menu in the classic app, form in the TUI), live observability event pane, PII redaction demos with fabricated PII |
+| Middleware | Form-based profile editor that generates the YAML config, live observability event pane, PII redaction demos with fabricated PII |
 | Providers & models | Engine/model switching at runtime, in-app API-key onboarding saved to `.env` |
 
 Every provider call renders a live pane showing elapsed time and, when the
 observability middleware is enabled, the metadata events the library emits.
+
+In the TUI, the completions, structured, image, video, and voice screens each
+have a **Generate** button that uses the completions API to write a fresh
+sample prompt (or, for structured, a fresh source text). Every screen also
+shows the exact prompt sent to the provider alongside its result — the
+structured screen displays the full `strict_schema_prompt` text.
 
 ## Requirements
 
@@ -76,7 +77,6 @@ JSON key file out of version control (`*.json` is gitignored).
 ```bash
 make run          # Textual TUI, local checkout (default)
 make run-pypi     # upgrades to the latest PyPI release first, then runs the TUI
-make run-classic  # classic Rich menu app
 make which        # print which library source and version is active
 ```
 

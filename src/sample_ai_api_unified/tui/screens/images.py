@@ -43,8 +43,9 @@ class ImagesScreen(CapabilityScreen):
         yield Static("", classes="field-label", id="engine-line")
         yield Input(placeholder="Image prompt…", id="prompt")
         with Horizontal(classes="actions"):
-            yield Button("Generate", variant="primary", id="generate")
+            yield Button("Generate image", variant="primary", id="generate")
             yield Button("Sample prompt", id="sample")
+            yield Button("Generate prompt", id="gen-prompt")
         yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
@@ -76,7 +77,7 @@ class ImagesScreen(CapabilityScreen):
                 saved.append(out_path)
             for out_path in saved:
                 open_file(out_path)
-            return "Saved:\n" + "\n".join(str(p) for p in saved)
+            return f"Prompt:\n{prompt}\n\nSaved:\n" + "\n".join(str(p) for p in saved)
 
         self.run_blocking(
             call,
@@ -91,6 +92,16 @@ class ImagesScreen(CapabilityScreen):
     @on(Input.Submitted, "#prompt")
     def _on_submit(self) -> None:
         self._generate(self.query_one("#prompt", Input).value)
+
+    @on(Button.Pressed, "#gen-prompt")
+    def _on_gen_prompt(self) -> None:
+        def fill(text: str) -> None:
+            self.query_one("#prompt", Input).value = text
+            self.set_result(
+                "result", f"Generated prompt (press Generate image to run it):\n\n{text}"
+            )
+
+        self.generate_prompt("image", fill)
 
     @on(Button.Pressed, "#sample")
     def _on_sample(self) -> None:

@@ -29,8 +29,9 @@ class VideosScreen(CapabilityScreen):
         yield Static("", classes="field-label", id="engine-line")
         yield Input(placeholder="Video prompt…", id="prompt")
         with Horizontal(classes="actions"):
-            yield Button("Generate", variant="primary", id="generate")
+            yield Button("Generate video", variant="primary", id="generate")
             yield Button("Sample prompt", id="sample")
+            yield Button("Generate prompt", id="gen-prompt")
         yield Static("", classes="result-panel", id="result")
 
     def on_mount(self) -> None:
@@ -65,7 +66,7 @@ class VideosScreen(CapabilityScreen):
                 poll_interval_seconds=10,
             )
             result = client.generate_video(prompt, properties)
-            lines = [f"Job {result.job.job_id} status: {result.job.status}"]
+            lines = [f"Prompt:\n{prompt}\n", f"Job {result.job.job_id} status: {result.job.status}"]
             for artifact in result.artifacts:
                 if artifact.file_path:
                     open_file(Path(artifact.file_path))
@@ -83,6 +84,16 @@ class VideosScreen(CapabilityScreen):
     @on(Button.Pressed, "#generate")
     def _on_generate(self) -> None:
         self._generate(self.query_one("#prompt", Input).value)
+
+    @on(Button.Pressed, "#gen-prompt")
+    def _on_gen_prompt(self) -> None:
+        def fill(text: str) -> None:
+            self.query_one("#prompt", Input).value = text
+            self.set_result(
+                "result", f"Generated prompt (press Generate video to run it):\n\n{text}"
+            )
+
+        self.generate_prompt("video", fill)
 
     @on(Button.Pressed, "#sample")
     def _on_sample(self) -> None:
