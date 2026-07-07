@@ -6,6 +6,7 @@ from sample_ai_api_unified import catalog
 VALID_SELECTORS = {
     "completions": {
         "openai",
+        "openai-responses",
         "google-gemini",
         "llama",
         "anthropic",

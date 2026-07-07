@@ -122,6 +122,23 @@ CAPABILITIES: dict[str, Capability] = {
                 "gpt-4o-mini",
             ),
             Engine(
+                "openai-responses",
+                "openai",
+                (
+                    "gpt-5",
+                    "gpt-5-mini",
+                    "gpt-5-nano",
+                    "gpt-4.1",
+                    "gpt-4.1-mini",
+                    "gpt-4.1-nano",
+                    "o4-mini",
+                    "gpt-4o",
+                    "gpt-4o-mini",
+                ),
+                "gpt-4o-mini",
+                note="OpenAI Responses API (successor to Chat Completions)",
+            ),
+            Engine(
                 "google-gemini",
                 "google",
                 (
@@ -132,8 +149,6 @@ CAPABILITIES: dict[str, Capability] = {
                     "gemini-2.0-flash-001",
                     "gemini-2.0-flash-lite",
                     "gemini-2.0-flash-lite-001",
-                    "gemini-1.5-pro-002",
-                    "gemini-1.5-flash-002",
                 ),
                 "gemini-2.5-flash",
             ),

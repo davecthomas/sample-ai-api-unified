@@ -47,6 +47,7 @@ def test_write_and_read_roundtrip(tmp_path, monkeypatch):
             capabilities=("embeddings",),
             token_count_mode="none",
             emit_error_events=False,
+            emit_cost=True,
         ),
         pii=mp.PiiProfile(
             enabled=True,
@@ -60,6 +61,13 @@ def test_write_and_read_roundtrip(tmp_path, monkeypatch):
     mp.write_profile(original, path)
     assert yaml.safe_load(path.read_text())  # valid YAML on disk
     assert mp.read_profile(path) == original
+
+
+def test_emit_cost_defaults_off_and_lands_in_yaml():
+    assert mp.ObservabilityProfile().emit_cost is False  # observe-only opt-in
+    data = mp.to_yaml_dict(mp.MiddlewareProfile())
+    obs_settings = data["middleware"][0]["settings"]
+    assert obs_settings["emit_cost"] is False
 
 
 def test_read_profile_missing_file_returns_defaults(tmp_path):

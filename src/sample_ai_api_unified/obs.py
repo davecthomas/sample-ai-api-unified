@@ -18,6 +18,9 @@ from pathlib import Path
 OBSERVABILITY_LOGGERS = (
     "ai_api_unified.middleware.observability",
     "ai_api_unified.middleware.metrics",
+    # Financial-ops cost topic (library 2.10.0): ai_api_call_cost events land
+    # here when the profile's emit_cost is on.
+    "ai_api_unified.observability.cost",
 )
 
 # Loggers whose output is also mirrored to the log file (beyond the two

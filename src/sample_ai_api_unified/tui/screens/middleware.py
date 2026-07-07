@@ -42,6 +42,8 @@ class MiddlewareScreen(CapabilityScreen):
         with Horizontal(classes="form-row"):
             yield Label("enabled")
             yield Switch(value=profile.observability.enabled, id="obs-enabled")
+            yield Label("emit cost")
+            yield Switch(value=profile.observability.emit_cost, id="obs-emit-cost")
             yield Label("direction")
             yield _select(mp.DIRECTIONS, profile.observability.direction, "obs-direction")
             yield Label("log level")
@@ -81,6 +83,7 @@ class MiddlewareScreen(CapabilityScreen):
             observability=replace(
                 current.observability,
                 enabled=self.query_one("#obs-enabled", Switch).value,
+                emit_cost=self.query_one("#obs-emit-cost", Switch).value,
                 direction=self.query_one("#obs-direction", Select).value,
                 log_level=self.query_one("#obs-log-level", Select).value,
             ),

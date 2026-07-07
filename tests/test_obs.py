@@ -25,6 +25,12 @@ def test_metrics_logger_lands_in_buffer():
     assert any("middleware_execution_timing" in line for line in obs.all_events())
 
 
+def test_cost_topic_lands_in_buffer():
+    # Library 2.10.0 cost enrichment logs ai_api_call_cost on its own topic.
+    logging.getLogger("ai_api_unified.observability.cost").info("ai_api_call_cost {usd: 0.0007}")
+    assert any("ai_api_call_cost" in line for line in obs.all_events())
+
+
 def test_tail_returns_most_recent():
     logger = logging.getLogger(obs.OBSERVABILITY_LOGGERS[0])
     for index in range(20):

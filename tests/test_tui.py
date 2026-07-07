@@ -612,6 +612,106 @@ async def test_completions_send_renders_bracketed_reply(offline_env, monkeypatch
         assert pilot.app.query("CompletionsScreen")  # rendered without aborting
 
 
+async def test_count_tokens_gates_on_capability(offline_env, monkeypatch):
+    """Non-supporting providers get a message; supporting ones get a count."""
+    import ai_api_unified
+
+    class _NoCount:
+        model_name = "gpt-4o-mini"
+
+        class capabilities:  # noqa: N801 - mimics the client attribute
+            supports_token_counting = False
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory, "get_ai_completions_client", staticmethod(lambda: _NoCount())
+    )
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.query_one("#prompt", Input).value = "measure me"
+        screen._on_count()
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "does not support provider-side token counting" in screen._last_result
+
+    class _Counts:
+        model_name = "amazon.nova-lite-v1:0"
+
+        class capabilities:  # noqa: N801
+            supports_token_counting = True
+
+        def count_tokens(self, prompt, *, other_params=None):
+            return 42
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory, "get_ai_completions_client", staticmethod(lambda: _Counts())
+    )
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.query_one("#prompt", Input).value = "measure me"
+        screen._on_count()
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "42" in screen._last_result and "input tokens" in screen._last_result
+
+
+async def test_model_info_shows_structured_pricing_and_lifecycle(offline_env, monkeypatch):
+    """Model info renders the 2.9.0 split rates, example cost, and lifecycle."""
+    import ai_api_unified
+
+    class _Client:
+        model_name = "gpt-4o-mini"
+        max_context_tokens = 128_000
+
+        @property
+        def capabilities(self):
+            from ai_api_unified.pricing import get_model_pricing
+
+            class Caps:
+                pricing = get_model_pricing("openai", "gpt-4o-mini")
+
+            return Caps()
+
+        def compute_completion_cost(self, *, input_tokens, output_tokens=0, cached_input_tokens=0):
+            return 0.00045
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory, "get_ai_completions_client", staticmethod(lambda: _Client())
+    )
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory, "list_completion_models", staticmethod(lambda c: ["gpt-4o-mini"])
+    )
+    monkeypatch.setenv("COMPLETIONS_ENGINE", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._on_info()
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        result = screen._last_result
+        assert "per 1M tokens" in result and "input $" in result  # split rates
+        assert "compute_completion_cost" in result  # example cost line
+        assert "Lifecycle: active" in result  # registry lifecycle status
+
+
+async def test_middleware_emit_cost_switch_persists(offline_env, monkeypatch, tmp_path):
+    from sample_ai_api_unified import middleware_profile as mp
+
+    yaml_path = tmp_path / "middleware.yaml"
+    monkeypatch.setattr(mp.paths, "MIDDLEWARE_YAML_PATH", yaml_path)
+    monkeypatch.setattr(mp.envfile, "set_env_values", lambda values: None)
+
+    async with SampleApp().run_test(size=(140, 50)) as pilot:
+        pilot.app.show_screen("middleware")
+        await pilot.pause()
+        await pilot.pause()  # let autosave arm
+        screen = pilot.app.query_one("MiddlewareScreen")
+        from textual.widgets import Switch
+
+        screen.query_one("#obs-emit-cost", Switch).value = True
+        await pilot.pause()
+        assert mp.read_profile(yaml_path).observability.emit_cost is True
+
+
 async def test_providers_tables_populate(offline_env):
     async with SampleApp().run_test() as pilot:
         pilot.app.show_screen("providers")
