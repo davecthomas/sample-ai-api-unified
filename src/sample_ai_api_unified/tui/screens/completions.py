@@ -308,8 +308,9 @@ class CompletionsScreen(CapabilityScreen):
             # Bedrock implements it via the CountTokens operation. Check the
             # flag for a clear message instead of the library's exception.
             if not client.capabilities.supports_token_counting:
+                # escape(): a custom model name may contain brackets.
                 return (
-                    f"[yellow]{client.model_name} does not support provider-side "
+                    f"[yellow]{escape(client.model_name)} does not support provider-side "
                     "token counting. Switch completions to a Bedrock engine "
                     "(e.g. nova or anthropic) to try count_tokens.[/yellow]"
                 )

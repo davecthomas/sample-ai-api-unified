@@ -700,13 +700,17 @@ async def test_middleware_emit_cost_switch_persists(offline_env, monkeypatch, tm
     monkeypatch.setattr(mp.paths, "MIDDLEWARE_YAML_PATH", yaml_path)
     monkeypatch.setattr(mp.envfile, "set_env_values", lambda values: None)
 
-    async with SampleApp().run_test(size=(140, 50)) as pilot:
+    async with SampleApp().run_test(size=(120, 50)) as pilot:
         pilot.app.show_screen("middleware")
         await pilot.pause()
         await pilot.pause()  # let autosave arm
         screen = pilot.app.query_one("MiddlewareScreen")
-        from textual.widgets import Switch
+        from textual.widgets import Select, Switch
 
+        # The new switch must not push other controls off a 120-col terminal:
+        # the log-level Select stays fully inside the viewport.
+        log_level = screen.query_one("#obs-log-level", Select)
+        assert log_level.region.right <= pilot.app.size.width
         screen.query_one("#obs-emit-cost", Switch).value = True
         await pilot.pause()
         assert mp.read_profile(yaml_path).observability.emit_cost is True
