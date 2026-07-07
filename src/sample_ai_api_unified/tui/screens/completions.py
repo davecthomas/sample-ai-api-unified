@@ -8,11 +8,27 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
-from ... import samples, state
+from ... import catalog, samples, state
 from ..modals import ChoiceModal
 from .base import CapabilityScreen
 
 CAPABILITY = "completions"
+
+# The pricing registry keys providers as openai/google/bedrock; the app's AWS
+# provider key maps to "bedrock" there.
+_REGISTRY_PROVIDER = {"aws": "bedrock"}
+
+
+def _model_info(model_name: str):
+    """The pricing registry's lifecycle/pricing entry for the current model."""
+    from ai_api_unified.pricing import get_model_info
+
+    provider = catalog.provider_for_engine(CAPABILITY, state.current_engine(CAPABILITY))
+    if provider is None:
+        return None
+    key = _REGISTRY_PROVIDER.get(provider.key, provider.key)
+    return get_model_info(key, model_name)
+
 
 DESCRIBE_PROMPT = "Describe this image in two sentences, mentioning shapes and colors you see."
 
@@ -61,6 +77,7 @@ class CompletionsScreen(CapabilityScreen):
             yield Button("System prompt", id="system")
             yield Button("Describe image", id="describe")
             yield Button("Model info", id="info")
+            yield Button("Count tokens", id="count")
 
     def on_mount(self) -> None:
         self._refresh_engine_line()
@@ -231,15 +248,80 @@ class CompletionsScreen(CapabilityScreen):
 
             client = AIFactory.get_ai_completions_client()
             models = ", ".join(AIFactory.list_completion_models(client))
-            return (
-                f"Model: {client.model_name}\n"
-                f"Max context tokens: {client.max_context_tokens:,}\n"
-                f"Price per 1k tokens: ${client.price_per_1k_tokens}\n"
-                f"Known models: {models}"
-            )
+            lines = [
+                f"Model: {client.model_name}",
+                f"Max context tokens: {client.max_context_tokens:,}",
+            ]
+            # Structured per-modality pricing + lifecycle (library 2.9.0). The
+            # blended price_per_1k_tokens is deprecated in favor of these split
+            # rates and compute_completion_cost.
+            pricing = client.capabilities.pricing
+            if pricing is not None and pricing.token_rates is not None:
+                rates = pricing.token_rates
+                lines.append(
+                    f"Pricing (per 1M tokens, {pricing.currency}): "
+                    f"input ${rates.input_per_1m}, output ${rates.output_per_1m}"
+                    + (
+                        f", cached input ${rates.cached_input_per_1m}"
+                        if rates.cached_input_per_1m is not None
+                        else ""
+                    )
+                )
+                example = client.compute_completion_cost(input_tokens=1_000, output_tokens=500)
+                lines.append(
+                    f"Example cost (1,000 in + 500 out): ${example:.6f} "
+                    "(compute_completion_cost)"
+                )
+                lines.append(f"Pricing source: {pricing.source}")
+            else:
+                lines.append("Pricing: not in the library's pricing registry")
+            info = _model_info(client.model_name)
+            if info is not None:
+                lifecycle = info.status.value
+                if info.recommended_replacement:
+                    lifecycle += f" (replacement: {info.recommended_replacement})"
+                lines.append(f"Lifecycle: {lifecycle}")
+            lines.append(f"Known models: {models}")
+            return escape("\n".join(lines))
 
         self.run_blocking(
             call,
             on_success=lambda text: self.set_result("result", text),
             description="Fetching model info",
+        )
+
+    @on(Button.Pressed, "#count")
+    def _on_count(self) -> None:
+        prompt = self.query_one("#prompt", Input).value
+        if not prompt.strip():
+            self.set_result("result", "[yellow]Enter a prompt to count first.[/yellow]")
+            return
+        if not self.app.ensure_capability_ready(CAPABILITY):  # type: ignore[attr-defined]
+            self.set_result("result", "[yellow]Engine not configured.[/yellow]")
+            return
+
+        def call() -> str:
+            from ai_api_unified import AIFactory
+
+            client = AIFactory.get_ai_completions_client()
+            # Provider-side token counting (library 2.8.0) is capability-gated;
+            # Bedrock implements it via the CountTokens operation. Check the
+            # flag for a clear message instead of the library's exception.
+            if not client.capabilities.supports_token_counting:
+                # escape(): a custom model name may contain brackets.
+                return (
+                    f"[yellow]{escape(client.model_name)} does not support provider-side "
+                    "token counting. Switch completions to a Bedrock engine "
+                    "(e.g. nova or anthropic) to try count_tokens.[/yellow]"
+                )
+            count = client.count_tokens(prompt)
+            return escape(
+                f"Prompt:\n{prompt}\n\nProvider-counted input tokens: {count:,}\n"
+                "(counted without running inference)"
+            )
+
+        self.run_blocking(
+            call,
+            on_success=lambda text: self.set_result("result", text),
+            description=f"Counting tokens via {state.current_engine(CAPABILITY)}",
         )

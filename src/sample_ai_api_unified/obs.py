@@ -18,11 +18,14 @@ from pathlib import Path
 OBSERVABILITY_LOGGERS = (
     "ai_api_unified.middleware.observability",
     "ai_api_unified.middleware.metrics",
+    # Financial-ops cost topic (library 2.10.0): ai_api_call_cost events land
+    # here when the profile's emit_cost is on.
+    "ai_api_unified.observability.cost",
 )
 
-# Loggers whose output is also mirrored to the log file (beyond the two
-# observability loggers): the library itself and the Google SDK, so an error
-# like a failed video download is captured with its context.
+# Loggers whose output is also mirrored to the log file (beyond the
+# observability loggers above): the library itself and the Google SDK, so an
+# error like a failed video download is captured with its context.
 _FILE_LOGGERS = OBSERVABILITY_LOGGERS + ("ai_api_unified", "google_genai")
 
 _BUFFER: deque[str] = deque(maxlen=500)

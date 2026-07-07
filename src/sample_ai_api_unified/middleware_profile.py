@@ -28,6 +28,9 @@ class ObservabilityProfile:
     log_level: str = "INFO"
     token_count_mode: str = "provider_or_estimate"
     emit_error_events: bool = True
+    # Financial-ops cost enrichment (library 2.10.0): when on, each call also
+    # emits an ai_api_call_cost event on the cost topic logger.
+    emit_cost: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,7 @@ def to_yaml_dict(profile: MiddlewareProfile) -> dict:
         "log_level": profile.observability.log_level,
         "token_count_mode": profile.observability.token_count_mode,
         "emit_error_events": profile.observability.emit_error_events,
+        "emit_cost": profile.observability.emit_cost,
     }
     if profile.observability.capabilities:
         observability_settings["capabilities"] = list(profile.observability.capabilities)
@@ -121,6 +125,7 @@ def read_profile(path: Path | None = None) -> MiddlewareProfile:
                 emit_error_events=bool(
                     settings.get("emit_error_events", observability.emit_error_events)
                 ),
+                emit_cost=bool(settings.get("emit_cost", observability.emit_cost)),
             )
         elif entry.get("name") == "pii_redaction":
             pii = PiiProfile(

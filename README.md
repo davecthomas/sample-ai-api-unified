@@ -18,13 +18,13 @@ keep that space for the response.
 
 | Capability | Library surface |
 | --- | --- |
-| Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, `send_prompt_streaming` (live token streaming), system prompts, image description via prompt media params |
+| Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, `send_prompt_streaming` (live token streaming), `count_tokens` (Bedrock provider-side counting), structured per-modality pricing + lifecycle via `capabilities.pricing` and `compute_completion_cost`, system prompts, image description via prompt media params |
 | Structured responses | `AIStructuredPrompt`, `strict_schema_prompt`, `StructuredResponseTokenLimitError` guard rail |
 | Embeddings | `generate_embeddings`, batches, cosine similarity, multimodal embeddings (`gemini-embedding-2`), capabilities descriptor |
 | Image generation | `generate_images` with per-provider properties (aspect ratio, size) |
 | Video generation | Blocking `generate_video`, explicit submit/poll/download job control, frame extraction |
 | Voice | TTS through your speakers with per-provider voice pickers, speech-to-text roundtrip |
-| Middleware | Form-based profile editor that generates the YAML config, live observability event pane, PII redaction demos with fabricated PII |
+| Middleware | Form-based profile editor that generates the YAML config, live observability event pane, per-call cost events (`emit_cost` → `ai_api_call_cost` on the cost topic), PII redaction demos with fabricated PII |
 | Providers & models | Engine/model switching at runtime, in-app API-key onboarding saved to `.env` |
 
 Every provider call renders a live pane showing elapsed time and, when the
@@ -143,7 +143,7 @@ engine option:
 
 | Capability | Engines |
 | --- | --- |
-| Completions | `openai` (GPT-5/4.1/o4/4o families), `google-gemini` (all nine Gemini spec models), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
+| Completions | `openai` and `openai-responses` (GPT-5/4.1/o4/4o families via Chat Completions or the Responses API), `google-gemini` (the seven Gemini 2.x spec models), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
 | Embeddings | `openai` (3 models), `google-gemini` (`gemini-embedding-001`, multimodal `gemini-embedding-2`), `titan` (v1, v2) |
 | Images | `openai` (`gpt-image-1`, DALL-E 2/3), `google-gemini` (Imagen 4 standard/fast/ultra, Gemini image models), `nova-canvas` |
 | Videos | `openai` (`sora-2`, `sora-2-pro`), `google-gemini` (Developer-API Veo models: `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`), `nova-reel` |
