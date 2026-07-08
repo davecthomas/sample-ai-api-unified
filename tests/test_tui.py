@@ -612,6 +612,18 @@ async def test_completions_send_renders_bracketed_reply(offline_env, monkeypatch
         assert pilot.app.query("CompletionsScreen")  # rendered without aborting
 
 
+def test_prompt_params_cover_each_native_engine():
+    """System-prompt/image params exist for every engine whose library client
+    honors them; unknown engines fall back to None (plain prompt)."""
+    from sample_ai_api_unified.tui.screens.completions import _prompt_params
+
+    for engine in ("openai", "google-gemini", "claude"):
+        params = _prompt_params(engine, system_prompt="be terse")
+        assert params is not None, f"{engine} should support system prompts"
+        assert params.system_prompt == "be terse"
+    assert _prompt_params("some-custom-engine", system_prompt="x") is None
+
+
 async def test_count_tokens_gates_on_capability(offline_env, monkeypatch):
     """Non-supporting providers get a message; supporting ones get a count."""
     import ai_api_unified

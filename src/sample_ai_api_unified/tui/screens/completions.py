@@ -57,6 +57,12 @@ def _prompt_params(engine: str, *, system_prompt=None, image=None, mime_type="im
         )
 
         return AICompletionsPromptParamsGoogle(**kwargs)
+    if engine == "claude":
+        # The native Anthropic engine takes the base params directly (it honors
+        # system_prompt and image attachments without a provider subclass).
+        from ai_api_unified.ai_base import AICompletionsPromptParamsBase
+
+        return AICompletionsPromptParamsBase(**kwargs)
     return None
 
 
