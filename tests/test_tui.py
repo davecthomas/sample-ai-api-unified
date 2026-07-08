@@ -612,15 +612,32 @@ async def test_completions_send_renders_bracketed_reply(offline_env, monkeypatch
         assert pilot.app.query("CompletionsScreen")  # rendered without aborting
 
 
-def test_prompt_params_cover_each_native_engine():
+# The params classes import provider SDK modules that live behind optional
+# extras; CI installs the base library only, so skip engines whose SDK is
+# absent (same convention as test_catalog_registry_sync).
+@pytest.mark.parametrize(
+    "engine,sdk_module",
+    [
+        ("openai", "openai"),
+        ("google-gemini", "google.genai"),
+        ("claude", None),  # base params only — no provider SDK import
+    ],
+)
+def test_prompt_params_cover_each_native_engine(engine, sdk_module):
     """System-prompt/image params exist for every engine whose library client
-    honors them; unknown engines fall back to None (plain prompt)."""
+    honors them."""
     from sample_ai_api_unified.tui.screens.completions import _prompt_params
 
-    for engine in ("openai", "google-gemini", "claude"):
-        params = _prompt_params(engine, system_prompt="be terse")
-        assert params is not None, f"{engine} should support system prompts"
-        assert params.system_prompt == "be terse"
+    if sdk_module is not None:
+        pytest.importorskip(sdk_module)
+    params = _prompt_params(engine, system_prompt="be terse")
+    assert params is not None, f"{engine} should support system prompts"
+    assert params.system_prompt == "be terse"
+
+
+def test_prompt_params_unknown_engine_falls_back_to_none():
+    from sample_ai_api_unified.tui.screens.completions import _prompt_params
+
     assert _prompt_params("some-custom-engine", system_prompt="x") is None
 
 
