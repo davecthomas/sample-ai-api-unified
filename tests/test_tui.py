@@ -717,13 +717,17 @@ async def test_middleware_emit_cost_switch_persists(offline_env, monkeypatch, tm
 
 
 async def test_providers_tables_populate(offline_env):
+    from sample_ai_api_unified import catalog
+
     async with SampleApp().run_test() as pilot:
         pilot.app.show_screen("providers")
         await pilot.pause()
         config = pilot.app.query_one("#config-table", DataTable)
         status = pilot.app.query_one("#status-table", DataTable)
         assert config.row_count == 5  # five capabilities
-        assert status.row_count == 5  # five providers
+        # One status row per provider in the catalog (openai, anthropic,
+        # google, aws, azure, elevenlabs, ...) — derive, don't hardcode.
+        assert status.row_count == len(catalog.PROVIDERS)
 
 
 async def test_choice_modal_returns_selection(offline_env):

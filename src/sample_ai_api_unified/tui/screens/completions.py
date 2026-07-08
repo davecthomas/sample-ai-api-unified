@@ -311,8 +311,8 @@ class CompletionsScreen(CapabilityScreen):
                 # escape(): a custom model name may contain brackets.
                 return (
                     f"[yellow]{escape(client.model_name)} does not support provider-side "
-                    "token counting. Switch completions to a Bedrock engine "
-                    "(e.g. nova or anthropic) to try count_tokens.[/yellow]"
+                    "token counting. Switch completions to claude or a Bedrock "
+                    "engine (e.g. nova) to try count_tokens.[/yellow]"
                 )
             count = client.count_tokens(prompt)
             return escape(
