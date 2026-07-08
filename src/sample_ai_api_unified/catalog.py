@@ -39,6 +39,12 @@ PROVIDERS: dict[str, Provider] = {
         env_keys=(EnvKey("OPENAI_API_KEY"),),
         key_url="https://platform.openai.com/api-keys",
     ),
+    "anthropic": Provider(
+        key="anthropic",
+        label="Anthropic",
+        env_keys=(EnvKey("ANTHROPIC_API_KEY"),),
+        key_url="https://console.anthropic.com/settings/keys",
+    ),
     "google": Provider(
         key="google",
         label="Google Gemini",
@@ -137,6 +143,20 @@ CAPABILITIES: dict[str, Capability] = {
                 ),
                 "gpt-4o-mini",
                 note="OpenAI Responses API (successor to Chat Completions)",
+            ),
+            Engine(
+                "claude",
+                "anthropic",
+                (
+                    "claude-fable-5",
+                    "claude-opus-4-8",
+                    "claude-opus-4-7",
+                    "claude-opus-4-6",
+                    "claude-sonnet-4-6",
+                    "claude-haiku-4-5",
+                ),
+                "claude-opus-4-8",
+                note="Native Anthropic Messages API (streams + counts tokens)",
             ),
             Engine(
                 "google-gemini",

@@ -7,6 +7,7 @@ VALID_SELECTORS = {
     "completions": {
         "openai",
         "openai-responses",
+        "claude",
         "google-gemini",
         "llama",
         "anthropic",

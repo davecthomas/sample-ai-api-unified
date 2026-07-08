@@ -64,9 +64,9 @@ make setup-local   # app deps + editable install of the local ../ai_api_unified 
 make setup-pypi    # app deps + latest ai-api-unified release from PyPI
 ```
 
-Both targets install every provider extra (OpenAI, Google Gemini, Bedrock,
-Azure TTS, ElevenLabs, video frames, similarity, PII redaction) and the
-`en_core_web_sm` spaCy model used by PII detection.
+Both targets install every provider extra (OpenAI, Anthropic, Google Gemini,
+Bedrock, Azure TTS, ElevenLabs, video frames, similarity, PII redaction) and
+the `en_core_web_sm` spaCy model used by PII detection.
 
 `make env` seeds `.env` from the local library checkout when one exists,
 falling back to `env_template`. A `.env` with zero keys works: when you first
@@ -143,7 +143,7 @@ engine option:
 
 | Capability | Engines |
 | --- | --- |
-| Completions | `openai` and `openai-responses` (GPT-5/4.1/o4/4o families via Chat Completions or the Responses API), `google-gemini` (the seven Gemini 2.x spec models), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
+| Completions | `openai` and `openai-responses` (GPT-5/4.1/o4/4o families via Chat Completions or the Responses API), `claude` (native Anthropic Messages API: Fable 5, Opus 4.8/4.7/4.6, Sonnet 4.6, Haiku 4.5 — streams and counts tokens), `google-gemini` (the seven Gemini 2.x spec models), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
 | Embeddings | `openai` (3 models), `google-gemini` (`gemini-embedding-001`, multimodal `gemini-embedding-2`), `titan` (v1, v2) |
 | Images | `openai` (`gpt-image-1`, DALL-E 2/3), `google-gemini` (Imagen 4 standard/fast/ultra, Gemini image models), `nova-canvas` |
 | Videos | `openai` (`sora-2`, `sora-2-pro`), `google-gemini` (Developer-API Veo models: `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`), `nova-reel` |

@@ -612,6 +612,35 @@ async def test_completions_send_renders_bracketed_reply(offline_env, monkeypatch
         assert pilot.app.query("CompletionsScreen")  # rendered without aborting
 
 
+# The params classes import provider SDK modules that live behind optional
+# extras; CI installs the base library only, so skip engines whose SDK is
+# absent (same convention as test_catalog_registry_sync).
+@pytest.mark.parametrize(
+    "engine,sdk_module",
+    [
+        ("openai", "openai"),
+        ("google-gemini", "google.genai"),
+        ("claude", None),  # base params only — no provider SDK import
+    ],
+)
+def test_prompt_params_cover_each_native_engine(engine, sdk_module):
+    """System-prompt/image params exist for every engine whose library client
+    honors them."""
+    from sample_ai_api_unified.tui.screens.completions import _prompt_params
+
+    if sdk_module is not None:
+        pytest.importorskip(sdk_module)
+    params = _prompt_params(engine, system_prompt="be terse")
+    assert params is not None, f"{engine} should support system prompts"
+    assert params.system_prompt == "be terse"
+
+
+def test_prompt_params_unknown_engine_falls_back_to_none():
+    from sample_ai_api_unified.tui.screens.completions import _prompt_params
+
+    assert _prompt_params("some-custom-engine", system_prompt="x") is None
+
+
 async def test_count_tokens_gates_on_capability(offline_env, monkeypatch):
     """Non-supporting providers get a message; supporting ones get a count."""
     import ai_api_unified
@@ -717,13 +746,17 @@ async def test_middleware_emit_cost_switch_persists(offline_env, monkeypatch, tm
 
 
 async def test_providers_tables_populate(offline_env):
+    from sample_ai_api_unified import catalog
+
     async with SampleApp().run_test() as pilot:
         pilot.app.show_screen("providers")
         await pilot.pause()
         config = pilot.app.query_one("#config-table", DataTable)
         status = pilot.app.query_one("#status-table", DataTable)
         assert config.row_count == 5  # five capabilities
-        assert status.row_count == 5  # five providers
+        # One status row per provider in the catalog (openai, anthropic,
+        # google, aws, azure, elevenlabs, ...) — derive, don't hardcode.
+        assert status.row_count == len(catalog.PROVIDERS)
 
 
 async def test_choice_modal_returns_selection(offline_env):

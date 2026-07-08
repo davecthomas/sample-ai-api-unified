@@ -57,6 +57,12 @@ def _prompt_params(engine: str, *, system_prompt=None, image=None, mime_type="im
         )
 
         return AICompletionsPromptParamsGoogle(**kwargs)
+    if engine == "claude":
+        # The native Anthropic engine takes the base params directly (it honors
+        # system_prompt and image attachments without a provider subclass).
+        from ai_api_unified.ai_base import AICompletionsPromptParamsBase
+
+        return AICompletionsPromptParamsBase(**kwargs)
     return None
 
 
@@ -311,8 +317,8 @@ class CompletionsScreen(CapabilityScreen):
                 # escape(): a custom model name may contain brackets.
                 return (
                     f"[yellow]{escape(client.model_name)} does not support provider-side "
-                    "token counting. Switch completions to a Bedrock engine "
-                    "(e.g. nova or anthropic) to try count_tokens.[/yellow]"
+                    "token counting. Switch completions to claude or a Bedrock "
+                    "engine (e.g. nova) to try count_tokens.[/yellow]"
                 )
             count = client.count_tokens(prompt)
             return escape(

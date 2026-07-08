@@ -40,6 +40,17 @@ def test_default_models_match_library_defaults():
     assert set(openai_videos.models) == set(openai_module.AIOpenAIVideos.SUPPORTED_VIDEO_MODELS)
 
 
+def test_claude_completions_models_match_library_specs():
+    module = pytest.importorskip("ai_api_unified.completions.ai_anthropic_completions")
+    cls = module.AiAnthropicCompletions
+    claude = catalog.engine_for("completions", "claude")
+    assert claude.default_model == cls.DEFAULT_COMPLETIONS_MODEL
+    # The capabilities context-window map is the library's authoritative
+    # Claude model enumeration.
+    caps_cls = module.AICompletionsCapabilitiesAnthropic
+    assert set(claude.models) == set(caps_cls.DICT_ANTHROPIC_CONTEXT_WINDOWS)
+
+
 def test_gemini_completions_models_match_library_specs():
     module = pytest.importorskip("ai_api_unified.completions.ai_google_gemini_completions")
     catalog_models = set(catalog.engine_for("completions", "google-gemini").models)

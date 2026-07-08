@@ -8,7 +8,7 @@
 # touches pyproject.toml or poetry.lock.
 
 LOCAL_LIB ?= ../ai_api_unified
-EXTRAS ?= openai,google_gemini,bedrock,azure_tts,elevenlabs,video_frames,similarity_score,middleware-pii-redaction
+EXTRAS ?= openai,google_gemini,bedrock,anthropic,azure_tts,elevenlabs,video_frames,similarity_score,middleware-pii-redaction
 POETRY ?= poetry
 PIP := $(POETRY) run pip
 
