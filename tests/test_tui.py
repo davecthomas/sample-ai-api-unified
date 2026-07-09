@@ -590,6 +590,106 @@ async def test_completions_stream_error_is_shown_not_fatal(offline_env, monkeypa
         assert pilot.app.query("CompletionsScreen")  # app still alive
 
 
+import ai_api_unified as _aiu  # noqa: E402
+
+# Batch completions need ai-api-unified 2.13.0+; CI installs the base library
+# from PyPI (2.11.0), so skip these there. They run against a local checkout.
+requires_batch = pytest.mark.skipif(
+    not hasattr(_aiu, "AIBatchRequestItem"),
+    reason="batch API requires ai-api-unified 2.13.0+",
+)
+
+
+@requires_batch
+async def test_batch_gated_on_capability(offline_env, monkeypatch):
+    import ai_api_unified
+
+    class _NoBatch:
+        model_name = "gpt-4o-mini"
+
+        class capabilities:  # noqa: N801 - mirrors the client attribute
+            supports_batch = False
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory, "get_ai_completions_client", staticmethod(lambda: _NoBatch())
+    )
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._on_batch()
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "does not support batch" in screen._last_result
+
+
+@requires_batch
+async def test_batch_submits_polls_and_renders_results(offline_env, monkeypatch):
+    import ai_api_unified
+    from ai_api_unified import (
+        AIBatchItemStatus,
+        AIBatchJob,
+        AIBatchResultItem,
+        AIBatchStatus,
+    )
+
+    from sample_ai_api_unified.tui.screens import completions as comp
+
+    monkeypatch.setattr(comp, "BATCH_POLL_SECONDS", 0)  # don't sleep in the test
+
+    class _Batch:
+        model_name = "claude-opus-4-8"
+
+        class capabilities:  # noqa: N801
+            supports_batch = True
+
+        def __init__(self):
+            self._items = []
+            self._polls = 0
+
+        def submit_batch(self, items):
+            self._items = items
+            return AIBatchJob(
+                batch_id="claude:b1",
+                provider_batch_id="b1",
+                status=AIBatchStatus.IN_PROGRESS,
+                request_count=len(items),
+                processing_count=len(items),
+            )
+
+        def get_batch(self, job):  # ends on the first poll
+            self._polls += 1
+            return job.model_copy(
+                update={
+                    "status": AIBatchStatus.ENDED,
+                    "processing_count": 0,
+                    "succeeded_count": len(self._items),
+                }
+            )
+
+        def get_batch_results(self, job):
+            return [
+                AIBatchResultItem(
+                    custom_id=item.custom_id,
+                    status=AIBatchItemStatus.SUCCEEDED,
+                    text=f"answer for {item.custom_id}",
+                    provider_prompt_tokens=8,
+                    provider_completion_tokens=4,
+                )
+                for item in self._items
+            ]
+
+    monkeypatch.setattr(
+        ai_api_unified.AIFactory, "get_ai_completions_client", staticmethod(lambda: _Batch())
+    )
+    async with SampleApp().run_test() as pilot:
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen._on_batch()
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        result = screen._last_result
+        assert "q1" in result and "answer for q1" in result  # correlated by custom_id
+        assert "succeeded" in result and "claude:b1" in result
+
+
 async def test_completions_send_renders_bracketed_reply(offline_env, monkeypatch):
     """A non-streaming reply with bracket tokens must render literally, not crash."""
     import ai_api_unified

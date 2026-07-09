@@ -14,9 +14,55 @@ from .base import CapabilityScreen
 
 CAPABILITY = "completions"
 
+# Batch completions (library 2.13.0, claude engine). Small demo batch; poll live
+# on a worker thread with a bounded wait — real batches finish server-side, so
+# on timeout the batch id is reported rather than blocking indefinitely.
+BATCH_TIMEOUT_SECONDS = 300.0
+BATCH_POLL_SECONDS = 15.0
+
 # The pricing registry keys providers as openai/google/bedrock; the app's AWS
 # provider key maps to "bedrock" there.
 _REGISTRY_PROVIDER = {"aws": "bedrock"}
+
+
+def _batch_status_text(job) -> str:
+    """One-line live status while a batch is processing."""
+    parts = [f"status {job.status.value}"]
+    for field, label in (
+        ("processing_count", "processing"),
+        ("succeeded_count", "succeeded"),
+        ("errored_count", "errored"),
+    ):
+        value = getattr(job, field, None)
+        if value:
+            parts.append(f"{value} {label}")
+    return f"Batch {job.batch_id}\n" + ", ".join(parts) + "\n\n(polling; batches are asynchronous)"
+
+
+def _batch_results_text(job, results, prompt_by_id: dict[str, str]) -> str:
+    """The ended batch: a per-request block keyed by custom_id (results arrive
+    out of order, so sort for a stable view)."""
+    header = (
+        f"Batch {job.batch_id} — {job.status.value}\n"
+        f"{job.succeeded_count or 0} succeeded, {job.errored_count or 0} errored "
+        f"of {job.request_count or len(results)}\n"
+    )
+    blocks = [header]
+    for item in sorted(results, key=lambda r: r.custom_id):
+        prompt = prompt_by_id.get(item.custom_id, "")
+        body = item.text if item.text is not None else (item.error_message or "")
+        tokens = ""
+        if item.provider_completion_tokens is not None:
+            tokens = (
+                f"  [{item.provider_prompt_tokens or 0} in / "
+                f"{item.provider_completion_tokens} out tokens]"
+            )
+        blocks.append(
+            f"[{item.custom_id}] {item.status.value}{tokens}\n"
+            f"  prompt: {prompt}\n"
+            f"  reply:  {body.strip()}"
+        )
+    return "\n\n".join(blocks)
 
 
 def _model_info(model_name: str):
@@ -84,6 +130,8 @@ class CompletionsScreen(CapabilityScreen):
             yield Button("Describe image", id="describe")
             yield Button("Model info", id="info")
             yield Button("Count tokens", id="count")
+        with Horizontal(classes="actions"):
+            yield Button("Batch", id="batch")
 
     def on_mount(self) -> None:
         self._refresh_engine_line()
@@ -331,3 +379,73 @@ class CompletionsScreen(CapabilityScreen):
             on_success=lambda text: self.set_result("result", text),
             description=f"Counting tokens via {state.current_engine(CAPABILITY)}",
         )
+
+    @on(Button.Pressed, "#batch")
+    def _on_batch(self) -> None:
+        if not self.app.ensure_capability_ready(CAPABILITY):  # type: ignore[attr-defined]
+            self.set_result("result", "[yellow]Engine not configured.[/yellow]")
+            return
+        prompts = list(samples.COMPLETION_PROMPTS)
+        prompt_by_id = {f"q{index}": prompt for index, prompt in enumerate(prompts, start=1)}
+        self.set_result("result", "[dim]Submitting batch…[/dim]")
+
+        def worker() -> None:
+            import time
+
+            try:
+                from ai_api_unified import AIFactory
+
+                client = AIFactory.get_ai_completions_client()
+                # Capability-gated (library 2.13.0); only the claude engine
+                # implements batch today. Check before importing the batch types
+                # so an older library shows this message rather than an
+                # ImportError, and getattr covers the flag being absent entirely.
+                if not getattr(client.capabilities, "supports_batch", False):
+                    self.app.call_from_thread(
+                        self.set_result,
+                        "result",
+                        f"[yellow]{escape(client.model_name)} does not support batch "
+                        "completions (Message Batches). Switch completions to the "
+                        "claude engine to try it.[/yellow]",
+                    )
+                    return
+                from ai_api_unified import AIBatchRequestItem
+
+                items = [
+                    AIBatchRequestItem(custom_id=cid, prompt=prompt)
+                    for cid, prompt in prompt_by_id.items()
+                ]
+                job = client.submit_batch(items)
+                deadline = time.monotonic() + BATCH_TIMEOUT_SECONDS
+                while not job.is_terminal:
+                    self.app.call_from_thread(
+                        self.set_result, "result", escape(_batch_status_text(job))
+                    )
+                    if time.monotonic() >= deadline:
+                        self.app.call_from_thread(
+                            self.set_result,
+                            "result",
+                            escape(
+                                f"Batch {job.batch_id} is still processing after "
+                                f"{BATCH_TIMEOUT_SECONDS:.0f}s (status {job.status.value}). "
+                                "Batches finish server-side (up to ~24h); press Batch "
+                                "again later to submit and poll a fresh one."
+                            ),
+                        )
+                        return
+                    time.sleep(BATCH_POLL_SECONDS)
+                    job = client.get_batch(job)
+                results = client.get_batch_results(job)
+                self.app.call_from_thread(
+                    self.set_result,
+                    "result",
+                    escape(_batch_results_text(job, results, prompt_by_id)),
+                )
+            except Exception as error:  # noqa: BLE001 - report any provider/config error
+                self.app.call_from_thread(
+                    self.set_result,
+                    "result",
+                    f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]",
+                )
+
+        self.run_worker(worker, thread=True, exclusive=False, exit_on_error=False)
