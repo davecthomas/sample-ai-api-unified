@@ -18,7 +18,7 @@ keep that space for the response.
 
 | Capability | Library surface |
 | --- | --- |
-| Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, `send_prompt_streaming` (live token streaming), `count_tokens` (Bedrock provider-side counting), structured per-modality pricing + lifecycle via `capabilities.pricing` and `compute_completion_cost`, system prompts, image description via prompt media params |
+| Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, `send_prompt_streaming` (live token streaming), `count_tokens` (Claude/Bedrock provider-side counting), `submit_batch`/`get_batch`/`get_batch_results` (Claude Message Batches), structured per-modality pricing + lifecycle via `capabilities.pricing` and `compute_completion_cost`, system prompts, image description via prompt media params |
 | Structured responses | `AIStructuredPrompt`, `strict_schema_prompt`, `StructuredResponseTokenLimitError` guard rail |
 | Embeddings | `generate_embeddings`, batches, cosine similarity, multimodal embeddings (`gemini-embedding-2`), capabilities descriptor |
 | Image generation | `generate_images` with per-provider properties (aspect ratio, size) |
@@ -42,6 +42,13 @@ as the provider produces it, with a live cursor and a final chunk count. Ask for
 something longer (a story, an explanation) to watch it arrive. Streaming is
 unavailable while PII redaction middleware is enabled — the library cannot
 guarantee redaction across chunk boundaries — and the screen says so if you try.
+
+The **Batch** button exercises Anthropic Message Batches (capability-gated on
+`supports_batch`, Claude only today): it submits the sample prompts as one batch,
+polls live on a worker thread, and renders each result correlated by `custom_id`
+with per-request status and token counts. Batches are asynchronous, so it reports
+the batch id and keeps polling; on a non-Claude engine it says the engine has no
+batch support.
 
 The embeddings screen's **Related & rank** button ties the two capabilities
 together: enter a phrase (e.g. "dogs like to sniff things"), and the completions
