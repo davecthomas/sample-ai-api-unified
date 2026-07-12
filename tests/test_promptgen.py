@@ -1,10 +1,21 @@
 """promptgen unit tests with a stubbed completions client (no network)."""
 
+import random
+import string
+
 import pytest
 
 pytest.importorskip("ai_api_unified")
 
 from sample_ai_api_unified import promptgen  # noqa: E402
+
+
+def _skeleton(template: str) -> str:
+    """The stable, placeholder-free run of characters a filled template keeps."""
+    # The longest literal segment between {placeholders} survives any fill, so
+    # we can assert it appears in whatever meta-prompt was actually sent.
+    segments = template.replace("{", "}").split("}")
+    return max((s for s in segments if s.strip()), key=len).strip(string.whitespace)
 
 
 class _FakeClient:
@@ -36,13 +47,37 @@ def test_each_kind_generates_and_trims(kind, stub_client):
     client = stub_client('  "a generated prompt"  ')
     result = promptgen.generate_prompt(kind)
     assert result == "a generated prompt"  # quotes and whitespace stripped
-    assert client.seen == promptgen.META_PROMPTS[kind]  # the meta-prompt was sent
+    # A filled meta-prompt was sent: it keeps the template's stable skeleton but
+    # is not the raw template (the {placeholders} were substituted).
+    assert _skeleton(promptgen.META_PROMPTS[kind]) in client.seen
+    assert "{" not in client.seen and "}" not in client.seen
+
+
+@pytest.mark.parametrize("kind", promptgen.KINDS)
+def test_meta_prompt_varies_across_calls(kind):
+    # The core promise of "Generate prompt": repeated calls steer the completions
+    # model somewhere new instead of resending an identical instruction.
+    rng = random.Random(0)
+    seen = {promptgen.build_meta_prompt(kind, rng) for _ in range(50)}
+    assert len(seen) > 1
+    assert all("{" not in m and "}" not in m for m in seen)
+
+
+def test_build_meta_prompt_is_deterministic_under_seed():
+    a = promptgen.build_meta_prompt("image", random.Random(42))
+    b = promptgen.build_meta_prompt("image", random.Random(42))
+    assert a == b
 
 
 def test_unknown_kind_raises(stub_client):
     stub_client("x")
     with pytest.raises(ValueError, match="Unknown prompt kind"):
         promptgen.generate_prompt("not-a-kind")
+
+
+def test_build_meta_prompt_unknown_kind_raises():
+    with pytest.raises(ValueError, match="Unknown prompt kind"):
+        promptgen.build_meta_prompt("not-a-kind")
 
 
 def test_kinds_cover_every_meta_prompt():
