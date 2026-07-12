@@ -95,6 +95,10 @@ class SampleApp(App):
         except NoMatches:
             return
         panel.collapsed = not panel.collapsed
+        # The screen scrolls; when expanding, bring the pane into the viewport so
+        # it is visible even when tall controls sit above it.
+        if not panel.collapsed:
+            panel.scroll_visible(animate=False)
 
     def action_copy_result(self) -> None:
         """Copy the current screen's result text (errors included) to the clipboard."""
