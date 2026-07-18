@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from rich.markup import escape
 from textual import on
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -16,9 +17,15 @@ from .base import CapabilityScreen
 CAPABILITY = "completions"
 
 
+def _finish(finish_reason) -> str:
+    return str(getattr(finish_reason, "value", finish_reason))
+
+
 class StructuredScreen(CapabilityScreen):
     title_text = "Structured responses"
-    subtitle_text = "Schema-validated output via AIStructuredPrompt.strict_schema_prompt."
+    subtitle_text = (
+        "Prompt-engineered strict_schema_prompt, and native send_structured_output (2.15)."
+    )
 
     # Optional generated source text for contact extraction; None uses the
     # built-in example.
@@ -31,6 +38,8 @@ class StructuredScreen(CapabilityScreen):
             yield Button("Trip plan", id="trip")
             yield Button("Generate source text", id="generate")
             yield Button("Token-limit guard", id="limit")
+        with Horizontal(classes="actions"):
+            yield Button("Structured output (native)", id="structured-output")
 
     def on_mount(self) -> None:
         engine = state.current_engine(CAPABILITY) or "unset"
@@ -84,6 +93,75 @@ class StructuredScreen(CapabilityScreen):
             )
 
         self.generate_prompt("structured_text", fill)
+
+    @on(Button.Pressed, "#structured-output")
+    def _on_structured_output(self) -> None:
+        """Native single-shot extraction: prose in, a parsed dict out, with a
+        normalized finish_reason and token usage — distinct from the older,
+        prompt-engineered strict_schema_prompt above."""
+        if not self._ready():
+            return
+
+        def call() -> dict:
+            from ai_api_unified import AIFactory
+            from ai_api_unified.middleware import (
+                reset_observability_context,
+                set_observability_context,
+            )
+
+            client = AIFactory.get_ai_completions_client()
+            if not client.capabilities.supports_structured_output:
+                return {"unsupported": client.model_name}
+            model = contact_extraction_class(self._source_text)
+            # Observability tags (library 2.14) ride along on the events this
+            # call emits, visible in the observability pane; reset afterwards so
+            # the context does not leak onto the next call on this thread.
+            token = set_observability_context(
+                caller_id="sample-app",
+                session_id="tui",
+                workflow_id="structured-output",
+                tags={"screen": "structured", "demo": "send_structured_output"},
+            )
+            try:
+                result = client.send_structured_output(
+                    prompt=model.get_prompt(),
+                    response_model=model,
+                    max_response_tokens=2048,
+                )
+            finally:
+                reset_observability_context(token)
+            return {"result": result, "prompt": model.get_prompt()}
+
+        def show(payload: dict) -> None:
+            if "unsupported" in payload:
+                self.set_result(
+                    "result",
+                    f"[yellow]{escape(payload['unsupported'])} does not support native "
+                    "structured output (supports_structured_output is False). Try claude, "
+                    "openai, openai-responses, google-gemini, or a Claude 4.5+ model on "
+                    "Bedrock.[/yellow]",
+                )
+                return
+            result = payload["result"]
+            usage = result.usage
+            data = (
+                json.dumps(result.data, indent=2)
+                if result.data is not None
+                else "(none — data is None on length/refusal; see finish_reason)"
+            )
+            body = (
+                f"Prompt:\n{payload['prompt']}\n\n"
+                f"send_structured_output → finish_reason={_finish(result.finish_reason)}\n"
+                f"tokens: {usage.input_tokens or 0} in / {usage.output_tokens or 0} out\n\n"
+                f"Parsed data:\n{data}"
+            )
+            self.set_result("result", escape(body))
+
+        self.run_blocking(
+            call,
+            on_success=show,
+            description=f"send_structured_output via {state.current_engine(CAPABILITY)}",
+        )
 
     @on(Button.Pressed, "#limit")
     def _on_limit(self) -> None:

@@ -97,9 +97,13 @@ class CapabilityScreen(Vertical):
                 value = await worker_obj.wait()
             except WorkerFailed as failed:
                 error = failed.error
-                self.set_result(
-                    result_id, f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]"
-                )
+                detail = f"{type(error).__name__}: {error}"
+                # AiProviderRequestError (library 2.15) carries a status_code that
+                # classifies 429/5xx/529 uniformly across engines; show it when present.
+                status_code = getattr(error, "status_code", None)
+                if status_code is not None:
+                    detail += f" (status_code={status_code})"
+                self.set_result(result_id, f"[red]{escape(detail)}[/red]")
                 return
             if self.is_mounted:
                 on_success(value)
