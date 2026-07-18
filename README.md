@@ -9,10 +9,12 @@ The TUI has sidebar navigation, a collapsible observability pane, and modal
 dialogs, with a screen for each capability: completions, structured responses,
 embeddings, image generation, video generation, voice, middleware, and
 providers/config. On every screen the controls sit at the top, the primary
-action button sits directly below the input it acts on, and the response fills
-the rest of the height in its own scrollable region so long completions are
-never clipped. The observability pane collapses by default (toggle with `o`) to
-keep that space for the response.
+action button sits directly below the input it acts on, and the response shows
+in its own scrollable region so long completions are never clipped. Each screen
+is a single scrolling column, so the observability pane below the response is
+always reachable even when the controls fill a short terminal. The pane
+collapses by default (toggle with `o`) to keep the space for the response, and
+expanding it scrolls it into view.
 
 ## What it covers
 

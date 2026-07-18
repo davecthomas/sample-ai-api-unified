@@ -273,6 +273,52 @@ async def test_obs_toggle_binding_expands_and_collapses(offline_env):
         assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is True
 
 
+async def test_obs_pane_visible_when_expanded_on_short_terminal(offline_env):
+    """Regression: on a short terminal the completions controls fill the screen,
+    so before the scrolling-column layout the expanded obs pane rendered below
+    the fold and looked blank. Expanding must scroll it fully into view."""
+    from sample_ai_api_unified.tui.widgets.obs_log import ObservabilityLog
+
+    async with SampleApp().run_test(size=(100, 24)) as pilot:
+        pilot.app.show_screen("completions")
+        await pilot.pause()
+        screen = pilot.app.query_one("CompletionsScreen")
+        screen.set_result("result", "\n".join(f"line {i}" for i in range(40)))
+        log = pilot.app.query_one(ObservabilityLog)
+        for i in range(30):
+            log.write(f"event #{i}")
+        await pilot.pause()
+        # Expand + scroll into view the way the 'o' binding now does.
+        pilot.app.action_toggle_obs()
+        await pilot.pause()
+        await pilot.pause()
+        region = log.region
+        screen_height = 24
+        assert region.height > 0
+        assert region.y >= 0
+        # The whole log sits within the viewport, not clipped off the bottom.
+        assert region.y + region.height <= screen_height
+
+
+async def test_generate_prompt_reveals_obs_pane(offline_env, monkeypatch):
+    """Generating a prompt is a completions call that emits observability events,
+    so it must reveal the (collapsed-by-default) pane to surface them."""
+    from textual.widgets import Collapsible
+
+    from sample_ai_api_unified import promptgen
+
+    monkeypatch.setattr(promptgen, "generate_prompt", lambda kind: f"generated for {kind}")
+
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        pilot.app.show_screen("completions")
+        await pilot.pause()
+        assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is True
+        await pilot.click("#generate")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert pilot.app.query_one("#obs-panel", Collapsible).collapsed is False
+
+
 async def test_set_result_updates_result_region(offline_env):
     async with SampleApp().run_test(size=(120, 44)) as pilot:
         screen = pilot.app.query_one("CompletionsScreen")

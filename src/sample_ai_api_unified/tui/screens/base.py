@@ -162,12 +162,30 @@ class CapabilityScreen(Vertical):
             body = f"{safe} [dim]▌[/dim]"  # cursor while streaming
         self.set_result(result_id, body)
 
+    def reveal_obs_panel(self) -> None:
+        """Expand this screen's observability pane and scroll it into view.
+
+        The screen is a scrolling column, so a freshly expanded pane can sit
+        below the fold under tall controls. Expanding a Collapsible schedules a
+        deferred re-layout, so the scroll is queued with ``call_after_refresh``
+        to run against the pane's expanded height rather than its collapsed one.
+        """
+        try:
+            panel = self.query_one("#obs-panel", Collapsible)
+        except NoMatches:
+            return
+        panel.collapsed = False
+        self.call_after_refresh(panel.scroll_visible, animate=False)
+
     def generate_prompt(self, kind: str, fill: Callable[[str], None]) -> None:
         """Generate a fresh prompt of ``kind`` via the completions API.
 
         Generation uses the completions engine regardless of this screen's own
         capability, so it gates on completions readiness and passes the result
-        to ``fill``.
+        to ``fill``. The call runs under a ``prompt-generation`` observability
+        context (reset afterwards so it does not leak onto later calls sharing
+        the worker thread), and on success reveals the observability pane when
+        observability is enabled so the events the call emitted are visible.
         """
         if not self.app.ensure_capability_ready("completions"):  # type: ignore[attr-defined]
             self.set_result(
@@ -177,8 +195,33 @@ class CapabilityScreen(Vertical):
             return
         from ... import promptgen
 
+        def call() -> str:
+            from ai_api_unified.middleware import (
+                reset_observability_context,
+                set_observability_context,
+            )
+
+            token = set_observability_context(
+                caller_id="sample-app", session_id="tui", workflow_id="prompt-generation"
+            )
+            try:
+                return promptgen.generate_prompt(kind)
+            finally:
+                # Reset so the worker thread does not carry this context onto the
+                # next call that reuses the thread (it would mislabel that call).
+                reset_observability_context(token)
+
+        def on_success(text: str) -> None:
+            fill(text)
+            # Only reveal the pane when observability is on; otherwise the call
+            # emits no events and the pane would expand onto stale/empty content.
+            from ... import middleware_profile as mp
+
+            if mp.read_profile().observability.enabled:
+                self.reveal_obs_panel()
+
         self.run_blocking(
-            lambda: promptgen.generate_prompt(kind),
-            on_success=fill,
+            call,
+            on_success=on_success,
             description="Generating a prompt via completions",
         )

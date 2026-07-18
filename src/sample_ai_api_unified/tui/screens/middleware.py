@@ -171,15 +171,10 @@ class MiddlewareScreen(CapabilityScreen):
 
         def show(text: str) -> None:
             self.set_result("result", text)
-            # The obs pane is collapsed by default; expand it so the events the
-            # demo just captured are actually visible.
-            from textual.css.query import NoMatches
-            from textual.widgets import Collapsible
-
-            try:
-                self.app.query_one("#obs-panel", Collapsible).collapsed = False
-            except NoMatches:
-                pass
+            # The obs pane is collapsed by default; expand and scroll it into
+            # view so the events the demo just captured are actually visible,
+            # even under tall controls on a short terminal.
+            self.reveal_obs_panel()
 
         self.run_blocking(
             call,

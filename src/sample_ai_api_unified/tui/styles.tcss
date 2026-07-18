@@ -36,6 +36,16 @@ Screen {
     padding: 1 2;
 }
 
+/* The screen is a single scrolling column: tall controls, the response box,
+   and the observability pane stack naturally and the column scrolls when they
+   exceed the viewport, so the obs pane is always reachable (even on short
+   terminals where the controls alone fill the screen). */
+CapabilityScreen {
+    height: 1fr;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
 .screen-title {
     text-style: bold;
     color: $accent;
@@ -52,11 +62,13 @@ Screen {
     padding: 1 0 0 0;
 }
 
-/* The response region fills the space between the controls and the
-   observability pane, and scrolls its own content. */
+/* The response region sizes to its content within a bounded band and scrolls
+   its own long output, so it never crowds the observability pane below it out
+   of the viewport. */
 #result-scroll {
-    height: 1fr;
+    height: auto;
     min-height: 6;
+    max-height: 22;
     border: round $primary;
     padding: 1 2;
     margin: 1 0;
@@ -113,7 +125,8 @@ DataTable {
 }
 
 ObservabilityLog {
-    height: 9;
+    height: 10;
+    min-height: 6;
     background: $panel;
     color: $text-muted;
 }
