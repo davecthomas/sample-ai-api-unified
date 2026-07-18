@@ -222,7 +222,10 @@ def _steering(kind: str, rng: random.Random) -> dict[str, str]:
         }
     if kind == "structured_text":
         return {"profession": rng.choice(_PROFESSIONS), "city": rng.choice(_CITIES)}
-    raise ValueError(f"Unknown prompt kind: {kind!r}")
+    # build_meta_prompt validates kind against META_PROMPTS before calling this,
+    # and every key has a branch above. Reaching here means a kind was added to
+    # META_PROMPTS without steering — a wiring bug, not bad input.
+    raise AssertionError(f"No steering defined for prompt kind: {kind!r}")
 
 
 def build_meta_prompt(kind: str, rng: random.Random | None = None) -> str:
