@@ -128,7 +128,58 @@ async def test_tool_use_gated_when_unsupported(offline_env, install_client):
         await pilot.click("#tool")
         await pilot.app.workers.wait_for_complete()
         await pilot.pause()
-        assert "does not support tool use" in _rendered(screen)
+        assert "supports_tool_use" in _rendered(screen)
+
+
+async def test_chat_turn_requires_tool_use_capability(offline_env, install_client):
+    # send_conversation requires supports_tool_use even without tools, so plain
+    # chat must gate on it too rather than surface a raw provider error.
+    install_client([], tool=False)
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = await _open(pilot)
+        screen.query_one("#message", Input).value = "hello"
+        await pilot.click("#send")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        assert "supports_tool_use" in _rendered(screen)
+        assert screen._messages == []  # nothing committed on a gated turn
+
+
+async def test_failed_turn_does_not_wedge_history(offline_env, monkeypatch):
+    class _Boom:
+        capabilities = _FakeCaps(tool=True)
+        model_name = "fake-model"
+
+        def send_conversation(self, *a, **k):
+            raise RuntimeError("transient network error")
+
+    monkeypatch.setattr(aiu.AIFactory, "get_ai_completions_client", staticmethod(lambda: _Boom()))
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = await _open(pilot)
+        screen.query_one("#message", Input).value = "hi"
+        await pilot.click("#send")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        # The failed turn left no orphan user message to break the next turn.
+        assert screen._messages == []
+        assert "transient network error" in _rendered(screen)
+        assert screen._busy is False
+
+
+async def test_pii_middleware_blocks_conversation(offline_env, monkeypatch, install_client):
+    from sample_ai_api_unified import middleware_profile as mp
+
+    install_client([_turn(text="unused")])
+    monkeypatch.setattr(
+        mp, "read_profile", lambda *a, **k: mp.MiddlewareProfile(pii=mp.PiiProfile(enabled=True))
+    )
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = await _open(pilot)
+        screen.query_one("#message", Input).value = "hi"
+        await pilot.click("#send")
+        await pilot.pause()
+        assert "PII redaction" in _rendered(screen)
+        assert screen._messages == []
 
 
 async def test_async_turn_runs_on_event_loop(offline_env, install_client):

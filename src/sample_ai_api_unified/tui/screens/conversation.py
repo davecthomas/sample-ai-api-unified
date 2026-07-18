@@ -65,10 +65,16 @@ class ConversationScreen(CapabilityScreen):
         "Multi-turn chat via send_conversation, a caller-owned tool loop, and an async turn."
     )
 
-    # Instance history is (re)initialized in on_mount; the API message list keeps
-    # engine-shaped turns for replay, the transcript keeps plain text for display.
-    _messages: list = []
-    _transcript: list = []
+    def __init__(self) -> None:
+        super().__init__()
+        # The API message list keeps engine-shaped turns for replay; the
+        # transcript keeps plain text for display. Committed only on a
+        # successful turn, so a failed turn never leaves an orphan user message.
+        self._messages: list = []
+        self._transcript: list = []
+        # One turn at a time: turns mutate shared history, so overlapping turns
+        # would interleave and corrupt it.
+        self._busy = False
 
     def compose_body(self) -> ComposeResult:
         yield Static("", classes="field-label", id="engine-line")
@@ -82,18 +88,61 @@ class ConversationScreen(CapabilityScreen):
             yield Button("Reset", id="reset")
 
     def on_mount(self) -> None:
-        self._messages = []
-        self._transcript = []
         engine = state.current_engine(CAPABILITY) or "unset"
         self.query_one("#engine-line", Static).update(f"engine: {engine}  (send_conversation)")
 
-    # ── helpers ──────────────────────────────────────────────────────
+    # ── gating helpers ───────────────────────────────────────────────
 
     def _ready(self) -> bool:
         if self.app.ensure_capability_ready(CAPABILITY):  # type: ignore[attr-defined]
             return True
         self.set_result("result", "[yellow]Completions engine not configured.[/yellow]")
         return False
+
+    def _pii_blocked(self) -> bool:
+        """send_conversation raises while PII redaction is on (replayed turn
+        content is opaque and can't be redacted), so pre-check like streaming."""
+        from ... import middleware_profile as mp
+
+        if mp.read_profile().pii.enabled:
+            self.set_result(
+                "result",
+                "[yellow]Conversation turns are unavailable while PII redaction is "
+                "enabled — replayed turn content is opaque and can't be redacted. "
+                "Disable it on the Middleware screen.[/yellow]",
+            )
+            return True
+        return False
+
+    def _can_start(self) -> bool:
+        """Shared entry gate for every action: completions ready, not mid-turn,
+        PII off. Engine capability (tool use / async) is checked in the worker,
+        where the client is built."""
+        if not self._ready():
+            return False
+        if self._busy:
+            self.set_result("result", "[yellow]A turn is already running.[/yellow]")
+            return False
+        return not self._pii_blocked()
+
+    def _engine_gate(self, client, *, need_async: bool = False) -> str | None:
+        """A yellow message if the engine can't run a conversation turn, else None.
+        send_conversation requires tool-use support even without tools."""
+        caps = client.capabilities
+        if not caps.supports_tool_use:
+            return (
+                f"{escape(client.model_name)} does not support conversation turns "
+                "(send_conversation requires supports_tool_use, which is False). Switch "
+                "completions to claude, openai, openai-responses, google-gemini, or a "
+                "Nova/Claude model on Bedrock."
+            )
+        if need_async and not caps.supports_async:
+            return (
+                f"{escape(client.model_name)} has no async client (supports_async is "
+                "False). Bedrock has no async SDK; try claude, openai, openai-responses, "
+                "or google-gemini."
+            )
+        return None
 
     def _render_transcript(self, turn=None, note: str = "") -> str:
         lines = []
@@ -129,147 +178,130 @@ class ConversationScreen(CapabilityScreen):
                 )
         return "\n\n".join(blocks)
 
-    # ── chat turn (blocking, on a worker thread) ─────────────────────
-
-    def _run_turn(self, message: str) -> None:
-        if not message.strip():
-            self.set_result("result", "[yellow]Type a message first.[/yellow]")
-            return
-        if not self._ready():
-            return
-        self._messages.append({"role": "user", "content": message})
-        self._transcript.append(("you", message))
-        self.query_one("#message", Input).value = ""
-
-        def call():
-            from ai_api_unified import AIFactory
-
-            client = AIFactory.get_ai_completions_client()
-            turn = client.send_conversation(SYSTEM_PROMPT, self._messages, max_response_tokens=1024)
-            # Append the assistant turn (engine-shaped) so the next turn has context.
-            client.extend_messages_with_turn(self._messages, turn)
-            return turn
-
-        def show(turn) -> None:
-            self._transcript.append(("assistant", turn.text or ""))
-            self.set_result("result", self._render_transcript(turn))
-
-        self.run_blocking(
-            call,
-            on_success=show,
-            description=f"Conversation via {state.current_engine(CAPABILITY)}",
-        )
+    # ── chat turn (sync or async, one shared worker) ─────────────────
 
     @on(Button.Pressed, "#send")
     def _on_send(self) -> None:
-        self._run_turn(self.query_one("#message", Input).value)
+        self._start_turn(use_async=False)
 
     @on(Input.Submitted, "#message")
     def _on_submit(self) -> None:
-        self._run_turn(self.query_one("#message", Input).value)
-
-    # ── async turn (on the event loop via asend_conversation) ────────
+        self._start_turn(use_async=False)
 
     @on(Button.Pressed, "#async")
     def _on_async(self) -> None:
+        self._start_turn(use_async=True)
+
+    def _start_turn(self, *, use_async: bool) -> None:
         message = self.query_one("#message", Input).value
         if not message.strip():
             self.set_result("result", "[yellow]Type a message first.[/yellow]")
             return
-        if not self._ready():
+        if not self._can_start():
             return
-        self.set_result("result", "[dim]Async turn via asend_conversation…[/dim]")
-        self.run_worker(self._async_turn(message), exclusive=False, exit_on_error=False)
+        self._busy = True
+        self.set_result("result", "[dim]Sending turn…[/dim]")
+        self.run_worker(self._turn_worker(message, use_async), exclusive=False, exit_on_error=False)
 
-    async def _async_turn(self, message: str) -> None:
+    async def _turn_worker(self, message: str, use_async: bool) -> None:
+        import asyncio
+
         from ai_api_unified import AIFactory
 
-        client = AIFactory.get_ai_completions_client()
-        if not client.capabilities.supports_async:
-            self.set_result(
-                "result",
-                f"[yellow]{escape(client.model_name)} has no async client "
-                "(supports_async is False). Bedrock has no async SDK; try the "
-                "claude, openai, openai-responses, or google-gemini engine.[/yellow]",
-            )
-            return
-        self._messages.append({"role": "user", "content": message})
-        self._transcript.append(("you", message))
-        self.query_one("#message", Input).value = ""
         try:
-            # await yields the event loop during network I/O, so the UI stays live.
-            turn = await client.asend_conversation(
-                SYSTEM_PROMPT, self._messages, max_response_tokens=1024
-            )
+            client = AIFactory.get_ai_completions_client()
+            gate = self._engine_gate(client, need_async=use_async)
+            if gate:
+                self.set_result("result", f"[yellow]{gate}[/yellow]")
+                return
+            # Work on a copy so the shared history is committed only on success —
+            # a failed turn leaves no orphan user message to wedge later turns.
+            messages = [*self._messages, {"role": "user", "content": message}]
+            if use_async:
+                # await yields the event loop during network I/O, so the UI stays live.
+                turn = await client.asend_conversation(
+                    SYSTEM_PROMPT, messages, max_response_tokens=1024
+                )
+            else:
+                # to_thread keeps the blocking call off the event loop.
+                turn = await asyncio.to_thread(
+                    client.send_conversation, SYSTEM_PROMPT, messages, max_response_tokens=1024
+                )
+            client.extend_messages_with_turn(messages, turn)
+            self._messages = messages
+            self._transcript.append(("you", message))
+            self._transcript.append(("assistant", turn.text or ""))
+            self.query_one("#message", Input).value = ""
+            note = "(ran on the event loop via asend_conversation)" if use_async else ""
+            self.set_result("result", self._render_transcript(turn, note=note))
         except Exception as error:  # noqa: BLE001 - surface any provider/config error
             self.set_result("result", f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]")
-            return
-        client.extend_messages_with_turn(self._messages, turn)
-        self._transcript.append(("assistant", turn.text or ""))
-        self.set_result(
-            "result",
-            self._render_transcript(turn, note="(ran on the event loop via asend_conversation)"),
-        )
+        finally:
+            self._busy = False
 
-    # ── tool-use demo (blocking loop on a worker thread) ─────────────
+    # ── tool-use demo (self-contained loop, own message list) ────────
 
     @on(Button.Pressed, "#tool")
     def _on_tool(self) -> None:
-        if not self._ready():
+        if not self._can_start():
             return
+        self._busy = True
         self.set_result("result", "[dim]Running the tool-use loop…[/dim]")
+        self.run_worker(self._tool_worker(), exclusive=False, exit_on_error=False)
 
-        def call():
-            from ai_api_unified import AIFactory, AITool
+    async def _tool_worker(self) -> None:
+        import asyncio
 
+        from ai_api_unified import AIFactory, AITool
+
+        try:
             client = AIFactory.get_ai_completions_client()
-            if not client.capabilities.supports_tool_use:
-                return {"unsupported": client.model_name}
-            tools = [
-                AITool(
-                    name="lookup_ticket",
-                    description="Look up a support ticket by its id.",
-                    input_schema={
-                        "type": "object",
-                        "properties": {"ticket_id": {"type": "string"}},
-                        "required": ["ticket_id"],
-                    },
-                    strict=True,
-                )
-            ]
-            messages = [{"role": "user", "content": TOOL_DEMO_MESSAGE}]
-            steps: list = []
-            for _ in range(MAX_TOOL_ITERATIONS):
-                turn = client.send_conversation(
-                    TOOL_SYSTEM_PROMPT, messages, tools=tools, max_response_tokens=1024
-                )
-                steps.append(("turn", turn))
-                if turn.finish_reason != "tool_use":
-                    break
-                client.extend_messages_with_turn(messages, turn)
-                for tool_call in turn.tool_calls:
-                    output = _lookup_ticket(str(tool_call.input.get("ticket_id", "")))
-                    steps.append(("tool", tool_call, output))
-                    messages.append(
-                        client.build_tool_result_message(
-                            tool_call_id=tool_call.id, result=output, is_error="error" in output
-                        )
-                    )
-            return {"steps": steps}
-
-        def show(result: dict) -> None:
-            if "unsupported" in result:
-                self.set_result(
-                    "result",
-                    f"[yellow]{escape(result['unsupported'])} does not support tool use "
-                    "(supports_tool_use is False). Switch completions to a tool-capable "
-                    "engine: claude, openai, openai-responses, google-gemini, or a Nova/"
-                    "Claude model on Bedrock.[/yellow]",
-                )
+            gate = self._engine_gate(client)
+            if gate:
+                self.set_result("result", f"[yellow]{gate}[/yellow]")
                 return
-            self.set_result("result", self._render_tool_steps(result["steps"]))
 
-        self.run_blocking(call, on_success=show, description="Tool-use loop via send_conversation")
+            def run_loop() -> list:
+                tools = [
+                    AITool(
+                        name="lookup_ticket",
+                        description="Look up a support ticket by its id.",
+                        input_schema={
+                            "type": "object",
+                            "properties": {"ticket_id": {"type": "string"}},
+                            "required": ["ticket_id"],
+                        },
+                        strict=True,
+                    )
+                ]
+                messages = [{"role": "user", "content": TOOL_DEMO_MESSAGE}]
+                steps: list = []
+                for _ in range(MAX_TOOL_ITERATIONS):
+                    turn = client.send_conversation(
+                        TOOL_SYSTEM_PROMPT, messages, tools=tools, max_response_tokens=1024
+                    )
+                    steps.append(("turn", turn))
+                    if turn.finish_reason != "tool_use":
+                        break
+                    client.extend_messages_with_turn(messages, turn)
+                    for tool_call in turn.tool_calls:
+                        output = _lookup_ticket(str(tool_call.input.get("ticket_id", "")))
+                        steps.append(("tool", tool_call, output))
+                        messages.append(
+                            client.build_tool_result_message(
+                                tool_call_id=tool_call.id,
+                                result=output,
+                                is_error="error" in output,
+                            )
+                        )
+                return steps
+
+            steps = await asyncio.to_thread(run_loop)
+            self.set_result("result", self._render_tool_steps(steps))
+        except Exception as error:  # noqa: BLE001 - surface any provider/config error
+            self.set_result("result", f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]")
+        finally:
+            self._busy = False
 
     # ── sample / reset ───────────────────────────────────────────────
 
