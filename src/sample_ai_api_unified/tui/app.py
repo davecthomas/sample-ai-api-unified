@@ -91,14 +91,15 @@ class SampleApp(App):
         from textual.widgets import Collapsible
 
         try:
-            panel = self.query_one("#obs-panel", Collapsible)
+            screen = self.query_one("#content", Container).query_one(CapabilityScreen)
+            panel = screen.query_one("#obs-panel", Collapsible)
         except NoMatches:
             return
-        panel.collapsed = not panel.collapsed
-        # The screen scrolls; when expanding, bring the pane into the viewport so
-        # it is visible even when tall controls sit above it.
-        if not panel.collapsed:
-            panel.scroll_visible(animate=False)
+        if panel.collapsed:
+            # Expand and scroll into view via the screen's shared reveal path.
+            screen.reveal_obs_panel()
+        else:
+            panel.collapsed = True
 
     def action_copy_result(self) -> None:
         """Copy the current screen's result text (errors included) to the clipboard."""
