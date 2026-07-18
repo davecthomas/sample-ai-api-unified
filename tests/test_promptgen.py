@@ -1,7 +1,7 @@
 """promptgen unit tests with a stubbed completions client (no network)."""
 
 import random
-import string
+import re
 
 import pytest
 
@@ -10,12 +10,15 @@ pytest.importorskip("ai_api_unified")
 from sample_ai_api_unified import promptgen  # noqa: E402
 
 
-def _skeleton(template: str) -> str:
-    """The stable, placeholder-free run of characters a filled template keeps."""
-    # The longest literal segment between {placeholders} survives any fill, so
-    # we can assert it appears in whatever meta-prompt was actually sent.
-    segments = template.replace("{", "}").split("}")
-    return max((s for s in segments if s.strip()), key=len).strip(string.whitespace)
+def _literal_segments(template: str) -> list[str]:
+    """Every literal run of a template between ``{placeholders}`` — the parts
+    that survive a fill.
+
+    Splitting on the whole ``{...}`` pattern yields the literal text only (not
+    the placeholder names), including the trailing instruction, so a filled
+    prompt must contain all of them (not just the longest one)."""
+    segments = re.split(r"\{[^}]*\}", template)
+    return [s.strip() for s in segments if s.strip()]
 
 
 class _FakeClient:
@@ -47,9 +50,11 @@ def test_each_kind_generates_and_trims(kind, stub_client):
     client = stub_client('  "a generated prompt"  ')
     result = promptgen.generate_prompt(kind)
     assert result == "a generated prompt"  # quotes and whitespace stripped
-    # A filled meta-prompt was sent: it keeps the template's stable skeleton but
-    # is not the raw template (the {placeholders} were substituted).
-    assert _skeleton(promptgen.META_PROMPTS[kind]) in client.seen
+    # A filled meta-prompt was sent: every literal segment of the template —
+    # including the trailing "reply with only…" instruction — survives, and the
+    # {placeholders} were substituted.
+    for segment in _literal_segments(promptgen.META_PROMPTS[kind]):
+        assert segment in client.seen
     assert "{" not in client.seen and "}" not in client.seen
 
 
