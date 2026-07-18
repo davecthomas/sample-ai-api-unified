@@ -14,6 +14,7 @@ from textual.widgets import Footer, Label, ListItem, ListView
 from .. import clipboard, envfile, obs, state
 from .screens.base import CapabilityScreen
 from .screens.completions import CompletionsScreen
+from .screens.conversation import ConversationScreen
 from .screens.embeddings import EmbeddingsScreen
 from .screens.images import ImagesScreen
 from .screens.middleware import MiddlewareScreen
@@ -25,6 +26,7 @@ from .screens.voice import VoiceScreen
 # (label, capability/screen key)
 NAV: tuple[tuple[str, str], ...] = (
     ("Completions", "completions"),
+    ("Conversation", "conversation"),
     ("Structured responses", "structured"),
     ("Embeddings", "embeddings"),
     ("Image generation", "images"),
@@ -36,6 +38,7 @@ NAV: tuple[tuple[str, str], ...] = (
 
 SCREENS: dict[str, type[CapabilityScreen]] = {
     "completions": CompletionsScreen,
+    "conversation": ConversationScreen,
     "structured": StructuredScreen,
     "embeddings": EmbeddingsScreen,
     "images": ImagesScreen,
