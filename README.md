@@ -22,13 +22,13 @@ expanding it scrolls it into view.
 | --- | --- |
 | Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, `send_prompt_streaming` (live token streaming), `count_tokens` (Claude/Bedrock provider-side counting), `submit_batch`/`get_batch`/`get_batch_results` (Claude Message Batches), structured per-modality pricing + lifecycle via `capabilities.pricing` and `compute_completion_cost`, system prompts, image description via prompt media params |
 | Conversation | Multi-turn `send_conversation` → `AITurnResult` (text, `finish_reason`, `usage`); a caller-owned tool-use loop with `AITool` + `extend_messages_with_turn` + `build_tool_result_message` (gated on `supports_tool_use`); an async turn via `asend_conversation` on the event loop (gated on `supports_async`) |
-| Structured responses | `AIStructuredPrompt`, `strict_schema_prompt`, `StructuredResponseTokenLimitError` guard rail |
+| Structured responses | `AIStructuredPrompt`, `strict_schema_prompt`, `StructuredResponseTokenLimitError` guard rail; native `send_structured_output` → `AIStructuredOutputResult` (parsed `data`, normalized `finish_reason`, `usage`) gated on `supports_structured_output`, with observability tags on the call |
 | Embeddings | `generate_embeddings`, batches, cosine similarity, multimodal embeddings (`gemini-embedding-2`), capabilities descriptor |
 | Image generation | `generate_images` with per-provider properties (aspect ratio, size) |
 | Video generation | Blocking `generate_video`, explicit submit/poll/download job control, frame extraction |
 | Voice | TTS through your speakers with per-provider voice pickers, speech-to-text roundtrip |
 | Middleware | Form-based profile editor that generates the YAML config, live observability event pane, per-call cost events (`emit_cost` → `ai_api_call_cost` on the cost topic), PII redaction demos with fabricated PII |
-| Providers & models | Engine/model switching at runtime, in-app API-key onboarding saved to `.env` |
+| Providers & models | Engine/model switching at runtime, in-app API-key onboarding saved to `.env`, completions `retry_policy` selector (`COMPLETIONS_RETRY_POLICY`) |
 
 Every provider call renders a live pane showing elapsed time and, when the
 observability middleware is enabled, the metadata events the library emits.
@@ -63,6 +63,21 @@ shown step by step (gated on `supports_tool_use`). **Async turn** runs the same
 call through `asend_conversation` on Textual's event loop (gated on
 `supports_async`). Tool use and async name the reason when the active engine
 lacks them.
+
+The structured screen shows two paths to the same goal. The primary buttons use
+the prompt-engineered `strict_schema_prompt`, while **Structured output (native)**
+uses `send_structured_output`, the library's native path (2.15) that maps to each
+provider's JSON-schema response format. It renders the parsed `data`, the
+normalized `finish_reason` (`complete`/`length`/`refusal`), and token `usage`,
+and is gated on `supports_structured_output`. The call carries observability tags
+(`screen`, `demo`), so with the observability middleware on you can see them in
+the pane below.
+
+On the providers screen, **Retry policy…** sets `COMPLETIONS_RETRY_POLICY` in
+`.env` to `default` (each engine's built-in retries) or `none` (a single
+attempt). Provider HTTP failures raise `AiProviderRequestError`; its
+`status_code` is shown in the error line so 429/5xx are distinguishable across
+engines.
 
 The embeddings screen's **Related & rank** button ties the two capabilities
 together: enter a phrase (e.g. "dogs like to sniff things"), and the completions
