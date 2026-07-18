@@ -21,6 +21,7 @@ expanding it scrolls it into view.
 | Capability | Library surface |
 | --- | --- |
 | Completions | `AIFactory.get_ai_completions_client()`, `send_prompt`, `send_prompt_streaming` (live token streaming), `count_tokens` (Claude/Bedrock provider-side counting), `submit_batch`/`get_batch`/`get_batch_results` (Claude Message Batches), structured per-modality pricing + lifecycle via `capabilities.pricing` and `compute_completion_cost`, system prompts, image description via prompt media params |
+| Conversation | Multi-turn `send_conversation` → `AITurnResult` (text, `finish_reason`, `usage`); a caller-owned tool-use loop with `AITool` + `extend_messages_with_turn` + `build_tool_result_message` (gated on `supports_tool_use`); an async turn via `asend_conversation` on the event loop (gated on `supports_async`) |
 | Structured responses | `AIStructuredPrompt`, `strict_schema_prompt`, `StructuredResponseTokenLimitError` guard rail |
 | Embeddings | `generate_embeddings`, batches, cosine similarity, multimodal embeddings (`gemini-embedding-2`), capabilities descriptor |
 | Image generation | `generate_images` with per-provider properties (aspect ratio, size) |
@@ -51,6 +52,17 @@ polls live on a worker thread, and renders each result correlated by `custom_id`
 with per-request status and token counts. Batches are asynchronous, so it reports
 the batch id and keeps polling; on a non-Claude engine it says the engine has no
 batch support.
+
+The conversation screen exercises the engine-agnostic conversation API added in
+library 2.14/2.15. **Send turn** calls `send_conversation` and keeps the running
+history, showing each turn's `finish_reason` and token `usage`. **Tool-use demo**
+runs a caller-owned loop: it registers a `lookup_ticket` tool, and when the model
+returns `finish_reason == "tool_use"` the app executes the tool locally, feeds the
+result back with `build_tool_result_message`, and continues — the whole loop is
+shown step by step (gated on `supports_tool_use`). **Async turn** runs the same
+call through `asend_conversation` on Textual's event loop (gated on
+`supports_async`). Tool use and async name the reason when the active engine
+lacks them.
 
 The embeddings screen's **Related & rank** button ties the two capabilities
 together: enter a phrase (e.g. "dogs like to sniff things"), and the completions
