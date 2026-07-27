@@ -5,11 +5,16 @@ Exercises the engine-agnostic conversation API added in ai-api-unified 2.14/2.15
 tool_calls, normalized finish_reason, token usage); the caller owns the tool
 loop via ``extend_messages_with_turn`` and ``build_tool_result_message``.
 ``asend_conversation`` is the async variant, run here on Textual's own event
-loop. Tool use and async are capability-gated (``supports_tool_use`` /
-``supports_async``) and report clearly when the active engine lacks them.
+loop. A "fail-fast" turn adds the per-call knobs — ``request_timeout_seconds``
+and ``provider_options`` carrying the reserved ``retry_policy`` override — so
+one call gets a single attempt without changing the app-wide policy. Tool use
+and async are capability-gated (``supports_tool_use`` / ``supports_async``) and
+report clearly when the active engine lacks them.
 """
 
 from __future__ import annotations
+
+from functools import partial
 
 from rich.markup import escape
 from textual import on
@@ -18,7 +23,7 @@ from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
 from ... import state
-from .base import CapabilityScreen
+from .base import CapabilityScreen, format_call_error
 
 # send_conversation is a method on the completions client, so this screen gates
 # on the completions engine like the other completion-backed screens.
@@ -31,6 +36,12 @@ TOOL_SYSTEM_PROMPT = (
 SAMPLE_MESSAGE = "In two sentences, what is a Merkle tree and why is it useful?"
 TOOL_DEMO_MESSAGE = "Summarize the status of ticket VL-123 in one sentence."
 MAX_TOOL_ITERATIONS = 4
+
+# "Fail fast" turn: a per-call deadline plus the per-call retry override
+# (library 2.14/2.15). provider_options is the engine-specific escape hatch and
+# reserves "retry_policy", so one call can opt out of the engine's built-in
+# backoff without changing COMPLETIONS_RETRY_POLICY for the whole app.
+FAIL_FAST_TIMEOUT_SECONDS = 10.0
 
 # A tiny, safe, deterministic "backend" for the tool-use demo. The model decides
 # when to call the tool; the app executes it locally and feeds the result back.
@@ -82,6 +93,7 @@ class ConversationScreen(CapabilityScreen):
         with Horizontal(classes="actions"):
             yield Button("Send turn", variant="primary", id="send")
             yield Button("Async turn", id="async")
+            yield Button("Fail-fast turn", id="failfast")
         with Horizontal(classes="actions"):
             yield Button("Tool-use demo", id="tool")
             yield Button("Sample", id="sample")
@@ -192,7 +204,11 @@ class ConversationScreen(CapabilityScreen):
     def _on_async(self) -> None:
         self._start_turn(use_async=True)
 
-    def _start_turn(self, *, use_async: bool) -> None:
+    @on(Button.Pressed, "#failfast")
+    def _on_failfast(self) -> None:
+        self._start_turn(use_async=False, fail_fast=True)
+
+    def _start_turn(self, *, use_async: bool, fail_fast: bool = False) -> None:
         message = self.query_one("#message", Input).value
         if not message.strip():
             self.set_result("result", "[yellow]Type a message first.[/yellow]")
@@ -201,12 +217,16 @@ class ConversationScreen(CapabilityScreen):
             return
         self._busy = True
         self.set_result("result", "[dim]Sending turn…[/dim]")
-        self.run_worker(self._turn_worker(message, use_async), exclusive=False, exit_on_error=False)
+        self.run_worker(
+            self._turn_worker(message, use_async, fail_fast),
+            exclusive=False,
+            exit_on_error=False,
+        )
 
-    async def _turn_worker(self, message: str, use_async: bool) -> None:
+    async def _turn_worker(self, message: str, use_async: bool, fail_fast: bool = False) -> None:
         import asyncio
 
-        from ai_api_unified import AIFactory
+        from ai_api_unified import RETRY_POLICY_NONE, AIFactory
 
         try:
             client = AIFactory.get_ai_completions_client()
@@ -214,28 +234,50 @@ class ConversationScreen(CapabilityScreen):
             if gate:
                 self.set_result("result", f"[yellow]{gate}[/yellow]")
                 return
+            # A fail-fast turn adds a per-call deadline and the reserved
+            # retry_policy escape-hatch key, so this one call gets a single
+            # attempt while the app-wide COMPLETIONS_RETRY_POLICY is untouched.
+            extra: dict = {}
+            if fail_fast:
+                extra = {
+                    "request_timeout_seconds": FAIL_FAST_TIMEOUT_SECONDS,
+                    "provider_options": {client.PROVIDER_OPTION_RETRY_POLICY: RETRY_POLICY_NONE},
+                }
             # Work on a copy so the shared history is committed only on success —
             # a failed turn leaves no orphan user message to wedge later turns.
             messages = [*self._messages, {"role": "user", "content": message}]
             if use_async:
                 # await yields the event loop during network I/O, so the UI stays live.
                 turn = await client.asend_conversation(
-                    SYSTEM_PROMPT, messages, max_response_tokens=1024
+                    SYSTEM_PROMPT, messages, max_response_tokens=1024, **extra
                 )
             else:
                 # to_thread keeps the blocking call off the event loop.
                 turn = await asyncio.to_thread(
-                    client.send_conversation, SYSTEM_PROMPT, messages, max_response_tokens=1024
+                    partial(
+                        client.send_conversation,
+                        SYSTEM_PROMPT,
+                        messages,
+                        max_response_tokens=1024,
+                        **extra,
+                    )
                 )
             client.extend_messages_with_turn(messages, turn)
             self._messages = messages
             self._transcript.append(("you", message))
             self._transcript.append(("assistant", turn.text or ""))
             self.query_one("#message", Input).value = ""
-            note = "(ran on the event loop via asend_conversation)" if use_async else ""
+            note = ""
+            if use_async:
+                note = "(ran on the event loop via asend_conversation)"
+            elif fail_fast:
+                note = (
+                    f"(single attempt: provider_options retry_policy={RETRY_POLICY_NONE!r}, "
+                    f"request_timeout_seconds={FAIL_FAST_TIMEOUT_SECONDS})"
+                )
             self.set_result("result", self._render_transcript(turn, note=note))
         except Exception as error:  # noqa: BLE001 - surface any provider/config error
-            self.set_result("result", f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]")
+            self.set_result("result", format_call_error(error))
         finally:
             self._busy = False
 
@@ -299,7 +341,7 @@ class ConversationScreen(CapabilityScreen):
             steps = await asyncio.to_thread(run_loop)
             self.set_result("result", self._render_tool_steps(steps))
         except Exception as error:  # noqa: BLE001 - surface any provider/config error
-            self.set_result("result", f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]")
+            self.set_result("result", format_call_error(error))
         finally:
             self._busy = False
 

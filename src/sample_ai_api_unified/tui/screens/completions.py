@@ -10,7 +10,7 @@ from textual.widgets import Button, Input, Static
 
 from ... import catalog, samples, state
 from ..modals import ChoiceModal
-from .base import CapabilityScreen
+from .base import CapabilityScreen, format_call_error
 
 CAPABILITY = "completions"
 
@@ -23,6 +23,16 @@ BATCH_POLL_SECONDS = 15.0
 # The pricing registry keys providers as openai/google/bedrock; the app's AWS
 # provider key maps to "bedrock" there.
 _REGISTRY_PROVIDER = {"aws": "bedrock"}
+
+# Per-call request timeouts (library 2.14). The short option is deliberately
+# below a normal round trip so the timeout error is easy to see; Bedrock has no
+# request-level timeout in boto3 and answers any of these with the typed
+# capability error.
+TIMEOUT_CHOICES: list[tuple[str, float]] = [
+    ("0.5s — shorter than a normal round trip; expect a timeout", 0.5),
+    ("5s", 5.0),
+    ("30s", 30.0),
+]
 
 
 def _batch_status_text(job) -> str:
@@ -122,6 +132,7 @@ class CompletionsScreen(CapabilityScreen):
         with Horizontal(classes="actions"):
             yield Button("Send", variant="primary", id="send")
             yield Button("Stream", id="stream")
+            yield Button("Async send", id="async")
         with Horizontal(classes="actions"):
             yield Button("Sample prompt", id="sample")
             yield Button("Generate prompt", id="generate")
@@ -132,6 +143,7 @@ class CompletionsScreen(CapabilityScreen):
             yield Button("Count tokens", id="count")
         with Horizontal(classes="actions"):
             yield Button("Batch", id="batch")
+            yield Button("Per-call timeout…", id="timeout")
 
     def on_mount(self) -> None:
         self._refresh_engine_line()
@@ -207,6 +219,90 @@ class CompletionsScreen(CapabilityScreen):
     @on(Button.Pressed, "#stream")
     def _on_stream(self) -> None:
         self._stream(self.query_one("#prompt", Input).value)
+
+    def _ready_prompt(self) -> str | None:
+        """The typed prompt once the engine is configured, else None (with the
+        reason already shown in the result pane)."""
+        prompt = self.query_one("#prompt", Input).value
+        if not prompt.strip():
+            self.set_result("result", "[yellow]Enter a prompt first.[/yellow]")
+            return None
+        if not self.app.ensure_capability_ready(CAPABILITY):  # type: ignore[attr-defined]
+            self.set_result("result", "[yellow]Engine not configured.[/yellow]")
+            return None
+        return prompt
+
+    @on(Button.Pressed, "#async")
+    def _on_async(self) -> None:
+        """The async variant (library 2.14/2.15): asend_prompt awaited on
+        Textual's own event loop, so no worker thread is involved."""
+        prompt = self._ready_prompt()
+        if prompt is None:
+            return
+
+        async def call() -> dict:
+            from ai_api_unified import AIFactory
+
+            client = AIFactory.get_ai_completions_client()
+            if not client.capabilities.supports_async:
+                return {"unsupported": client.model_name}
+            return {"reply": await client.asend_prompt(prompt)}
+
+        def show(payload: dict) -> None:
+            if "unsupported" in payload:
+                self.set_result(
+                    "result",
+                    f"[yellow]{escape(payload['unsupported'])} has no async client "
+                    "(supports_async is False). Bedrock has no async boto3 client; try "
+                    "claude, openai, openai-responses, or google-gemini.[/yellow]",
+                )
+                return
+            self.set_result(
+                "result",
+                f"Prompt:\n{escape(prompt)}\n\nResponse:\n{escape(payload['reply'])}\n\n"
+                "[dim]— awaited on the event loop via asend_prompt[/dim]",
+            )
+
+        self.run_awaitable(
+            call,
+            on_success=show,
+            description=f"Async completion via {state.current_engine(CAPABILITY)}",
+        )
+
+    @on(Button.Pressed, "#timeout")
+    def _on_timeout(self) -> None:
+        """Per-call request_timeout_seconds (library 2.14): a deadline for this
+        one call, independent of the engine-wide retry policy."""
+        prompt = self._ready_prompt()
+        if prompt is None:
+            return
+
+        def chosen(seconds: float | None) -> None:
+            if seconds is None:
+                return
+            self._send_with_timeout(prompt, seconds)
+
+        self.app.push_screen(
+            ChoiceModal("Per-call timeout (request_timeout_seconds)", list(TIMEOUT_CHOICES)),
+            chosen,
+        )
+
+    def _send_with_timeout(self, prompt: str, seconds: float) -> None:
+        def call() -> str:
+            from ai_api_unified import AIFactory
+
+            client = AIFactory.get_ai_completions_client()
+            reply = client.send_prompt(prompt, request_timeout_seconds=seconds)
+            return (
+                f"request_timeout_seconds={seconds}\n\n"
+                f"Prompt:\n{escape(prompt)}\n\nResponse:\n{escape(reply)}"
+            )
+
+        self.run_blocking(
+            call,
+            on_success=lambda text: self.set_result("result", text),
+            description=f"Completion with a {seconds}s per-call timeout",
+        )
 
     @on(Button.Pressed, "#generate")
     def _on_generate(self) -> None:
@@ -442,10 +538,6 @@ class CompletionsScreen(CapabilityScreen):
                     escape(_batch_results_text(job, results, prompt_by_id)),
                 )
             except Exception as error:  # noqa: BLE001 - report any provider/config error
-                self.app.call_from_thread(
-                    self.set_result,
-                    "result",
-                    f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]",
-                )
+                self.app.call_from_thread(self.set_result, "result", format_call_error(error))
 
         self.run_worker(worker, thread=True, exclusive=False, exit_on_error=False)

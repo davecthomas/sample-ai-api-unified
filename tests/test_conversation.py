@@ -37,6 +37,9 @@ class _FakeCaps:
 class _FakeClient:
     """Returns queued turns and records how the screen drove the loop."""
 
+    # Mirrors the real client's reserved provider_options key.
+    PROVIDER_OPTION_RETRY_POLICY = "retry_policy"
+
     def __init__(self, turns, caps):
         self._turns = list(turns)
         self.capabilities = caps
@@ -45,7 +48,14 @@ class _FakeClient:
         self.built_results = []
 
     def send_conversation(self, system_prompt, messages, *, tools=None, **kwargs):
-        self.sent.append({"system": system_prompt, "messages": list(messages), "tools": tools})
+        self.sent.append(
+            {
+                "system": system_prompt,
+                "messages": list(messages),
+                "tools": tools,
+                "kwargs": kwargs,
+            }
+        )
         return self._turns.pop(0)
 
     async def asend_conversation(self, system_prompt, messages, **kwargs):
@@ -203,6 +213,54 @@ async def test_async_gated_when_unsupported(offline_env, install_client):
         await pilot.app.workers.wait_for_complete()
         await pilot.pause()
         assert "no async client" in _rendered(screen)
+
+
+async def test_fail_fast_turn_sends_per_call_timeout_and_retry_override(
+    offline_env, install_client
+):
+    """The per-call knobs (library 2.14/2.15): request_timeout_seconds plus the
+    reserved retry_policy key in provider_options, for this call only."""
+    from sample_ai_api_unified.tui.screens.conversation import FAIL_FAST_TIMEOUT_SECONDS
+
+    client = install_client([_turn(text="quick reply")])
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = await _open(pilot)
+        screen.query_one("#message", Input).value = "hello"
+        await pilot.click("#failfast")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        kwargs = client.sent[0]["kwargs"]
+        assert kwargs["request_timeout_seconds"] == FAIL_FAST_TIMEOUT_SECONDS
+        assert kwargs["provider_options"] == {"retry_policy": "none"}
+        out = _rendered(screen)
+        assert "quick reply" in out and "single attempt" in out
+
+
+async def test_capability_error_reads_as_a_capability_note(offline_env, monkeypatch):
+    """A typed capability error is a verified gap, not a failure, so it renders
+    yellow with the gate explained rather than as a red provider error."""
+
+    class _Gated:
+        capabilities = _FakeCaps(tool=True)
+        model_name = "fake-model"
+        PROVIDER_OPTION_RETRY_POLICY = "retry_policy"
+
+        def send_conversation(self, *a, **k):
+            raise aiu.AiProviderCapabilityUnsupportedError(
+                "per-call timeouts are not supported by this engine"
+            )
+
+    monkeypatch.setattr(aiu.AIFactory, "get_ai_completions_client", staticmethod(lambda: _Gated()))
+    async with SampleApp().run_test(size=(120, 44)) as pilot:
+        screen = await _open(pilot)
+        screen.query_one("#message", Input).value = "hi"
+        await pilot.click("#failfast")
+        await pilot.app.workers.wait_for_complete()
+        await pilot.pause()
+        out = _rendered(screen)
+        assert "[yellow]" in out and "[red]" not in out
+        assert "capability gate" in out
+        assert "per-call timeouts are not supported" in out
 
 
 async def test_conversation_gates_on_completions(offline_env, monkeypatch):
