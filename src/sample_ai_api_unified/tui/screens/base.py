@@ -8,7 +8,7 @@ its controls only; the base owns the response region and the observability pane.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from textual.app import ComposeResult
 from textual.containers import Vertical, VerticalScroll
@@ -19,6 +19,41 @@ from textual.widgets import Collapsible, Label, Static
 from textual.worker import WorkerFailed
 
 from ..widgets import ObservabilityLog
+
+
+def _capability_error_class() -> type[BaseException] | None:
+    """The library's typed capability error, or None on an older library."""
+    try:
+        from ai_api_unified import AiProviderCapabilityUnsupportedError
+    except ImportError:
+        return None
+    return AiProviderCapabilityUnsupportedError
+
+
+def format_call_error(error: BaseException) -> str:
+    """Rich markup for a failed library call, shared by every screen.
+
+    ``AiProviderCapabilityUnsupportedError`` is how the library reports a
+    verified gap — a call the configured engine does not implement, such as a
+    per-call timeout on Bedrock (boto3 has no request-level timeout) or an async
+    variant on an engine with no async SDK. That is a capability answer rather
+    than a failure, so it reads yellow like the app's other capability notes.
+    Everything else is red, with the ``AiProviderRequestError.status_code``
+    (library 2.15) appended when present so 429/5xx/529 are distinguishable
+    across engines.
+    """
+    detail = f"{type(error).__name__}: {error}"
+    capability_error = _capability_error_class()
+    if capability_error is not None and isinstance(error, capability_error):
+        return (
+            f"[yellow]{escape(detail)}\n"
+            "(the library's typed capability gate — this engine does not implement "
+            "that call)[/yellow]"
+        )
+    status_code = getattr(error, "status_code", None)
+    if status_code is not None:
+        detail += f" (status_code={status_code})"
+    return f"[red]{escape(detail)}[/red]"
 
 
 class CapabilityScreen(Vertical):
@@ -96,10 +131,35 @@ class CapabilityScreen(Vertical):
             try:
                 value = await worker_obj.wait()
             except WorkerFailed as failed:
-                error = failed.error
-                self.set_result(
-                    result_id, f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]"
-                )
+                self.set_result(result_id, format_call_error(failed.error))
+                return
+            if self.is_mounted:
+                on_success(value)
+
+        self.run_worker(runner(), exclusive=False, exit_on_error=False)
+
+    def run_awaitable(
+        self,
+        make_coro: Callable[[], Awaitable[Any]],
+        *,
+        on_success: Callable[[Any], None],
+        description: str = "Working",
+        result_id: str = "result",
+    ) -> None:
+        """Await an async library call (``asend_*``) on Textual's event loop.
+
+        The async variants added in library 2.14/2.15 yield the loop during
+        network I/O, so no thread is needed and the UI stays live. ``make_coro``
+        is called inside the worker so the coroutine is created on the loop that
+        awaits it.
+        """
+        self.set_result(result_id, f"[dim]{description}…[/dim]")
+
+        async def runner() -> None:
+            try:
+                value = await make_coro()
+            except Exception as error:  # noqa: BLE001 - report any provider/config error
+                self.set_result(result_id, format_call_error(error))
                 return
             if self.is_mounted:
                 on_success(value)
@@ -132,13 +192,10 @@ class CapabilityScreen(Vertical):
                         self._render_stream, result_id, prefix, "".join(parts), len(parts), False
                     )
             except Exception as error:  # noqa: BLE001 - report any provider/config error
-                # escape() so a provider/markup error message containing brackets
-                # (e.g. an unmatched Rich tag) cannot itself fail to render.
-                self.app.call_from_thread(
-                    self.set_result,
-                    result_id,
-                    f"[red]{escape(f'{type(error).__name__}: {error}')}[/red]",
-                )
+                # format_call_error escapes the message, so a provider error
+                # containing brackets (e.g. an unmatched Rich tag) cannot itself
+                # fail to render.
+                self.app.call_from_thread(self.set_result, result_id, format_call_error(error))
                 return
             self.app.call_from_thread(
                 self._render_stream, result_id, prefix, "".join(parts), len(parts), True

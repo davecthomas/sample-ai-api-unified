@@ -7,9 +7,15 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Button, DataTable, Static
 
-from ... import catalog, onboarding, state
+from ... import catalog, envfile, onboarding, state
 from ..modals import ChoiceModal, OnboardingModal
 from .base import CapabilityScreen
+
+# Completions retry policy (library 2.15): "default" keeps each engine's built-in
+# retries; "none" collapses to a single attempt. Read by the factory via the
+# COMPLETIONS_RETRY_POLICY environment variable.
+RETRY_POLICY_ENV = "COMPLETIONS_RETRY_POLICY"
+RETRY_POLICIES = ("default", "none")
 
 
 class ProvidersScreen(CapabilityScreen):
@@ -21,9 +27,11 @@ class ProvidersScreen(CapabilityScreen):
         yield DataTable(id="config-table", cursor_type="none")
         yield Static("Provider credentials", classes="field-label")
         yield DataTable(id="status-table", cursor_type="none")
+        yield Static("", classes="field-label", id="retry-line")
         with Horizontal(classes="actions"):
             yield Button("Switch engine…", variant="primary", id="switch")
             yield Button("Configure keys…", id="keys")
+            yield Button("Retry policy…", id="retry")
 
     def on_mount(self) -> None:
         config = self.query_one("#config-table", DataTable)
@@ -47,6 +55,10 @@ class ProvidersScreen(CapabilityScreen):
             plain_status = state_text.replace("[green]", "").replace("[/green]", "")
             plain_status = plain_status.replace("[red]", "").replace("[/red]", "")
             status.add_row(label, plain_status, detail)
+        policy = envfile.get_env(RETRY_POLICY_ENV, "") or "default"
+        self.query_one("#retry-line", Static).update(
+            f"completions retry policy: {policy}  ({RETRY_POLICY_ENV})"
+        )
 
     @on(Button.Pressed, "#switch")
     def _on_switch(self) -> None:
@@ -90,6 +102,28 @@ class ProvidersScreen(CapabilityScreen):
                 self.set_result("result", f"[yellow]{provider.label} not configured.[/yellow]")
 
         self.app.push_screen(OnboardingModal(provider), done)
+
+    @on(Button.Pressed, "#retry")
+    def _on_retry(self) -> None:
+        current = envfile.get_env(RETRY_POLICY_ENV, "") or "default"
+        options = [
+            (f"{policy}{' (current)' if policy == current else ''}", policy)
+            for policy in RETRY_POLICIES
+        ]
+
+        def picked(policy: str | None) -> None:
+            if not policy:
+                return
+            envfile.set_env_values({RETRY_POLICY_ENV: policy})
+            self.set_result(
+                "result",
+                f"Completions retry policy set to {policy!r} "
+                f"({RETRY_POLICY_ENV}). 'none' collapses each engine to a single attempt; "
+                "'default' keeps its built-in retries.",
+            )
+            self._refresh()
+
+        self.app.push_screen(ChoiceModal("Completions retry policy", options), picked)
 
     @on(Button.Pressed, "#keys")
     def _on_keys(self) -> None:
