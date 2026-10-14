@@ -8,7 +8,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
-from ... import catalog, samples, state
+from ... import catalog, fallback, samples, state
 from ..modals import ChoiceModal
 from .base import CapabilityScreen, format_call_error
 
@@ -168,7 +168,9 @@ class CompletionsScreen(CapabilityScreen):
             reply = client.send_prompt(prompt)
             # escape() so bracketed prompt/response text renders literally rather
             # than being parsed as Rich markup.
-            return f"Prompt:\n{escape(prompt)}\n\nResponse:\n{escape(reply)}"
+            return f"Prompt:\n{escape(prompt)}\n\nResponse:\n{escape(reply)}" + fallback.route_note(
+                client
+            )
 
         self.run_blocking(
             call,

@@ -62,7 +62,9 @@ def set_model(capability_key: str, model: str) -> None:
     envfile.set_env_values({catalog.CAPABILITIES[capability_key].model_env: model})
 
 
-# Models known to 404 on the path the app actually calls. Google video runs
+# Models known to 404 on the path the app actually calls. Library 2.28 retired
+# Imagen 4 and the Gemini image previews in favor of the GA Gemini image models.
+# Google video runs
 # through the Developer (api-key) client, whose catalog is the veo-3.1 preview
 # family; these Vertex-only names are not served there. A persisted value here
 # (e.g. written by an older build of this app) is healed to the engine default;
@@ -73,6 +75,11 @@ UNAVAILABLE_MODELS: frozenset[str] = frozenset(
         "veo-3.0-generate-001",
         "veo-3.0-fast-generate-001",
         "veo-2.0-generate-001",
+        "imagen-4.0-generate-001",
+        "imagen-4.0-fast-generate-001",
+        "imagen-4.0-ultra-generate-001",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-image-preview",
     }
 )
 

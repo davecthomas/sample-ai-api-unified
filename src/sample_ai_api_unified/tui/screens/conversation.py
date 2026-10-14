@@ -7,8 +7,10 @@ loop via ``extend_messages_with_turn`` and ``build_tool_result_message``.
 ``asend_conversation`` is the async variant, run here on Textual's own event
 loop. A "fail-fast" turn adds the per-call knobs — ``request_timeout_seconds``
 and ``provider_options`` carrying the reserved ``retry_policy`` override — so
-one call gets a single attempt without changing the app-wide policy. Tool use
-and async are capability-gated (``supports_tool_use`` / ``supports_async``) and
+one call gets a single attempt without changing the app-wide policy. A
+"failover" turn (library 2.32) sends to a primary with a model id that does not
+exist and a Gemini fallback, so a real 404 shows the chain moving the request.
+Tool use and async are capability-gated (``supports_tool_use`` / ``supports_async``) and
 report clearly when the active engine lacks them.
 """
 
@@ -22,7 +24,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Button, Input, Static
 
-from ... import state
+from ... import fallback, state
 from .base import CapabilityScreen, format_call_error
 
 # send_conversation is a method on the completions client, so this screen gates
@@ -42,6 +44,11 @@ MAX_TOOL_ITERATIONS = 4
 # reserves "retry_policy", so one call can opt out of the engine's built-in
 # backoff without changing COMPLETIONS_RETRY_POLICY for the whole app.
 FAIL_FAST_TIMEOUT_SECONDS = 10.0
+
+# Failover demo (library 2.32): a primary model id no provider serves, so the
+# request fails with a real 404 (fallback_reason MODEL_UNAVAILABLE). That reason
+# is off by default, so the demo turns it on for this one client.
+FAILOVER_DEMO_MODEL = "no-such-model-failover-demo"
 
 # A tiny, safe, deterministic "backend" for the tool-use demo. The model decides
 # when to call the tool; the app executes it locally and feeds the result back.
@@ -96,6 +103,7 @@ class ConversationScreen(CapabilityScreen):
             yield Button("Fail-fast turn", id="failfast")
         with Horizontal(classes="actions"):
             yield Button("Tool-use demo", id="tool")
+            yield Button("Failover demo", id="failover")
             yield Button("Sample", id="sample")
             yield Button("Reset", id="reset")
 
@@ -156,7 +164,7 @@ class ConversationScreen(CapabilityScreen):
             )
         return None
 
-    def _render_transcript(self, turn=None, note: str = "") -> str:
+    def _render_transcript(self, turn=None, note: str = "", route: str = "") -> str:
         lines = []
         for role, text in self._transcript:
             label = "You" if role == "you" else "Assistant"
@@ -166,7 +174,7 @@ class ConversationScreen(CapabilityScreen):
             body += f"\n\n[dim]finish={escape(_finish(turn.finish_reason))} · tokens {_usage(turn)}[/dim]"
         if note:
             body += f"\n[dim]{escape(note)}[/dim]"
-        return body
+        return body + route
 
     def _render_tool_steps(self, steps: list) -> str:
         blocks = ["[b]Tool-use loop[/b] — send_conversation with a lookup_ticket tool:\n"]
@@ -275,7 +283,10 @@ class ConversationScreen(CapabilityScreen):
                     f"(single attempt: provider_options retry_policy={RETRY_POLICY_NONE!r}, "
                     f"request_timeout_seconds={FAIL_FAST_TIMEOUT_SECONDS})"
                 )
-            self.set_result("result", self._render_transcript(turn, note=note))
+            self.set_result(
+                "result",
+                self._render_transcript(turn, note=note, route=fallback.route_note(client)),
+            )
         except Exception as error:  # noqa: BLE001 - surface any provider/config error
             self.set_result("result", format_call_error(error))
         finally:
@@ -294,7 +305,7 @@ class ConversationScreen(CapabilityScreen):
     async def _tool_worker(self) -> None:
         import asyncio
 
-        from ai_api_unified import AIFactory, AITool
+        from ai_api_unified import AiFallbackCompletions, AIFactory, AITool
 
         try:
             client = AIFactory.get_ai_completions_client()
@@ -329,17 +340,91 @@ class ConversationScreen(CapabilityScreen):
                     for tool_call in turn.tool_calls:
                         output = _lookup_ticket(str(tool_call.input.get("ticket_id", "")))
                         steps.append(("tool", tool_call, output))
+                        # A fallback client shapes the tool result for the engine
+                        # that produced this history, which messages= tells it.
+                        shape = (
+                            {"messages": messages}
+                            if isinstance(client, AiFallbackCompletions)
+                            else {}
+                        )
                         messages.append(
                             client.build_tool_result_message(
                                 tool_call_id=tool_call.id,
                                 result=output,
                                 is_error="error" in output,
+                                **shape,
                             )
                         )
                 return steps
 
             steps = await asyncio.to_thread(run_loop)
-            self.set_result("result", self._render_tool_steps(steps))
+            self.set_result("result", self._render_tool_steps(steps) + fallback.route_note(client))
+        except Exception as error:  # noqa: BLE001 - surface any provider/config error
+            self.set_result("result", format_call_error(error))
+        finally:
+            self._busy = False
+
+    # ── failover demo (own client and message list) ──────────────────
+
+    @on(Button.Pressed, "#failover")
+    def _on_failover(self) -> None:
+        if not self._can_start():
+            return
+        from ... import catalog
+
+        if not catalog.provider_configured(catalog.PROVIDERS["google"]):
+            self.set_result(
+                "result",
+                "[yellow]The failover demo falls back to Gemini. Configure Google "
+                "Gemini on the Providers screen first.[/yellow]",
+            )
+            return
+        self._busy = True
+        self.set_result("result", "[dim]Sending to a missing model; watch it fail over…[/dim]")
+        self.run_worker(self._failover_worker(), exclusive=False, exit_on_error=False)
+
+    async def _failover_worker(self) -> None:
+        import asyncio
+
+        from ai_api_unified import AIFactory, AiFallbackReason
+
+        engine = state.current_engine(CAPABILITY)
+        try:
+            client = AIFactory.get_ai_completions_client(
+                completions_engine=engine,
+                model_name=FAILOVER_DEMO_MODEL,
+                fallbacks=[(fallback.GEMINI_FALLBACK_ENGINE, fallback.GEMINI_FALLBACK_MODEL)],
+                fallback_on={
+                    AiFallbackReason.UNAVAILABLE,
+                    AiFallbackReason.RATE_LIMITED,
+                    AiFallbackReason.QUOTA_EXHAUSTED,
+                    AiFallbackReason.MODEL_UNAVAILABLE,
+                },
+            )
+            message = self.query_one("#message", Input).value.strip() or SAMPLE_MESSAGE
+            turn = await asyncio.to_thread(
+                partial(
+                    client.send_conversation,
+                    SYSTEM_PROMPT,
+                    [{"role": "user", "content": message}],
+                    max_response_tokens=1024,
+                )
+            )
+            chain = " → ".join(escape(c.label) for c in client.candidates)
+            served = f"{turn.provider_engine}:{turn.model_name}"
+            self.set_result(
+                "result",
+                "[b]Failover demo[/b] — AiFallbackCompletions with "
+                f"fallback_on including model_unavailable\n"
+                f"chain: {chain}\n\n"
+                f"[b]You:[/b] {escape(message)}\n\n"
+                f"[b]Assistant:[/b] {escape(turn.text or '')}\n\n"
+                f"[dim]finish={escape(_finish(turn.finish_reason))} · tokens {_usage(turn)}[/dim]\n"
+                f"[green]served by {escape(served)}[/green] "
+                "(turn.provider_engine / turn.model_name). The failover is logged as "
+                "ai_fallback_event=failover on "
+                "ai_api_unified.completions.ai_fallback_completions.",
+            )
         except Exception as error:  # noqa: BLE001 - surface any provider/config error
             self.set_result("result", format_call_error(error))
         finally:

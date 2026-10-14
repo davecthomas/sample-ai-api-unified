@@ -1,10 +1,42 @@
 [project]
 name = "sample-ai-api-unified"
-version = "0.7.0"
-description = "Textual TUI that exercises every capability of ai-api-unified with real provider calls."
+version = "0.8.0"
+description = "Textual TUI sample app for ai-api-unified: one Python API across OpenAI, Anthropic Claude, Google Gemini, and AWS Bedrock for completions, tool use, structured output, model fallback, embeddings, image, video, and voice."
 authors = [{ name = "Dave Thomas" }]
 license = { text = "MIT" }
 readme = "README.md"
+keywords = [
+    "ai-api-unified",
+    "llm",
+    "generative-ai",
+    "multi-provider",
+    "openai",
+    "anthropic",
+    "claude",
+    "google-gemini",
+    "aws-bedrock",
+    "model-fallback",
+    "tool-calling",
+    "structured-output",
+    "embeddings",
+    "image-generation",
+    "video-generation",
+    "text-to-speech",
+    "textual",
+    "tui",
+    "sample-app",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console :: Curses",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "textual>=0.60,<2",
@@ -17,6 +49,10 @@ dependencies = [
 # into the Poetry virtualenv from either the local checkout (editable) or the
 # latest PyPI release, so the two sources can be swapped without touching the
 # lock file. See `make use-local` and `make use-pypi`.
+
+[project.urls]
+Repository = "https://github.com/davecthomas/sample-ai-api-unified"
+Library = "https://pypi.org/project/ai-api-unified/"
 
 [project.optional-dependencies]
 dev = [
