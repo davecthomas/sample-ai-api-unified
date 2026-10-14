@@ -11,6 +11,11 @@ multi-turn conversations with tool calling, structured output, automatic model
 fallback, embeddings, image generation, video generation, and text-to-speech.
 It targets ai-api-unified 2.32.
 
+Out of the box, completions run on Anthropic Claude (`claude-opus-5`) with
+Google Gemini (`gemini-3.7-flash`) as the fallback. Embeddings, images, video,
+and voice run on Google, since Anthropic does not offer those. Change any of it
+from the Providers screen.
+
 The TUI has sidebar navigation, a collapsible observability pane, and modal
 dialogs, with a screen for each capability: completions, structured responses,
 embeddings, image generation, video generation, voice, middleware, and
@@ -217,9 +222,9 @@ engine option:
 
 | Capability | Engines |
 | --- | --- |
-| Completions | `openai` and `openai-responses` (GPT-5/4.1/o4/4o families via Chat Completions or the Responses API), `claude` (native Anthropic Messages API: Fable 5, Opus 4.8/4.7/4.6, Sonnet 4.6, Haiku 4.5 — streams and counts tokens), `google-gemini` (the seven Gemini 2.x spec models), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
+| Completions | `openai` and `openai-responses` (GPT-5/4.1/o4/4o families via Chat Completions or the Responses API), `claude` (native Anthropic Messages API: Fable 5.1/5, Opus 5.5/5/4.8/4.7/4.6, Sonnet 5/4.6, Haiku 4.5 — streams and counts tokens), `google-gemini` (Gemini 3.8/3.7/3.6/3.5 Flash, 3.5/3.1 Flash-Lite, 3.1 Pro preview, 2.5 Pro/Flash/Flash-Lite), and the Bedrock-routed `nova`, `anthropic`, `llama`, `mistral`, `cohere`, `ai21` |
 | Embeddings | `openai` (3 models), `google-gemini` (`gemini-embedding-001`, multimodal `gemini-embedding-2`), `titan` (v1, v2) |
-| Images | `openai` (`gpt-image-1`, DALL-E 2/3), `google-gemini` (Imagen 4 standard/fast/ultra, Gemini image models), `nova-canvas` |
+| Images | `openai` (`gpt-image-1`, DALL-E 2/3), `google-gemini` (`gemini-3.1-flash-image`, `gemini-3.1-flash-lite-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image`), `nova-canvas` |
 | Videos | `openai` (`sora-2`, `sora-2-pro`), `google-gemini` (Developer-API Veo models: `veo-3.1-generate-preview`, `veo-3.1-fast-generate-preview`, `veo-3.1-lite-generate-preview`), `nova-reel` |
 | Voice | `openai`, `google` (Gemini TTS models), `azure`, `elevenlabs` |
 
