@@ -5,6 +5,12 @@ A **Textual full-screen TUI** that exercises every capability of
 calls. Use it to explore the library, compare providers and models, and see
 the middleware system at work.
 
+**In one sentence:** a runnable Python sample app showing how one API calls
+OpenAI, Anthropic Claude, Google Gemini, and AWS Bedrock for LLM completions,
+multi-turn conversations with tool calling, structured output, automatic model
+fallback, embeddings, image generation, video generation, and text-to-speech.
+It targets ai-api-unified 2.32.
+
 The TUI has sidebar navigation, a collapsible observability pane, and modal
 dialogs, with a screen for each capability: completions, structured responses,
 embeddings, image generation, video generation, voice, middleware, and
@@ -28,7 +34,8 @@ expanding it scrolls it into view.
 | Video generation | Blocking `generate_video`, explicit submit/poll/download job control, frame extraction |
 | Voice | TTS through your speakers with per-provider voice pickers, speech-to-text roundtrip |
 | Middleware | Form-based profile editor that generates the YAML config, live observability event pane, per-call cost events (`emit_cost` → `ai_api_call_cost` on the cost topic), PII redaction demos with fabricated PII |
-| Providers & models | Engine/model switching at runtime, in-app API-key onboarding saved to `.env`, completions `retry_policy` selector (`COMPLETIONS_RETRY_POLICY`) |
+| Providers & models | Engine/model switching at runtime, in-app API-key onboarding saved to `.env`, completions `retry_policy` selector (`COMPLETIONS_RETRY_POLICY`), model fallback chain to Gemini (`COMPLETIONS_FALLBACKS`, `COMPLETIONS_FALLBACK_ON`) |
+| Model fallback | `AiFallbackCompletions` built by the factory from `COMPLETIONS_FALLBACKS`; a live failover demo on the conversation screen; `turn.provider_engine` / `turn.model_name` and `last_route` show which model answered |
 
 Every provider call renders a live pane showing elapsed time and, when the
 observability middleware is enabled, the metadata events the library emits.
@@ -91,6 +98,24 @@ engines. When a call asks for something the engine has no implementation for —
 a per-call timeout on Bedrock, an async variant with no async SDK — the library
 raises `AiProviderCapabilityUnsupportedError`; every screen shows that as a
 yellow capability note naming the gate rather than as a red failure.
+
+On the same screen, **Fallback chain…** sets up model fallback (library 2.32).
+It writes `COMPLETIONS_FALLBACKS=google-gemini:gemini-3.7-flash` and
+`COMPLETIONS_FALLBACK_ON` to `.env`, and asks for Google credentials first if
+they are missing. You can fail over on outages, rate limits, and exhausted quota
+(the library default), add `model_unavailable` to also fail over on an unknown
+or retired model id, or turn the chain off. While the chain is on, every
+completions client the app builds is an `AiFallbackCompletions`. When Gemini
+answers a request the primary could not, the completions and conversation
+screens say which model served it.
+
+The conversation screen's **Failover demo** shows a failover without waiting
+for an outage. It builds a client whose primary is the current engine with a
+model id that does not exist, and Gemini as the fallback. It also turns on
+`model_unavailable` for that one client, so the primary's real 404 moves the
+request to Gemini. The result names the chain and the model that served the
+turn. With the observability middleware on, the pane shows the failed call.
+The library also logs the move as `ai_fallback_event=failover`.
 
 The embeddings screen's **Related & rank** button ties the two capabilities
 together: enter a phrase (e.g. "dogs like to sniff things"), and the completions
@@ -246,6 +271,11 @@ library expects to `config/middleware.yaml`, and points
   authentication section, linked above). Under `service_account`, the video
   screen runs the call with a temporary `api_key` override when
   `GOOGLE_GEMINI_API_KEY` is set (restored afterward); with no key set it says so.
+
+- **Gemini fallback fails with `404 NOT_FOUND ... Publisher model ...
+  gemini-3.7-flash`**: under `service_account` auth, Vertex AI serves Gemini
+  3.x models from the `global` location, not from a region. Set
+  `GOOGLE_LOCATION=global` in `.env`.
 
 ## Logs
 

@@ -25,9 +25,9 @@ def test_set_engine_persists_engine_and_default_model(captured_env):
 
 
 def test_set_engine_with_explicit_model(captured_env):
-    state.set_engine("images", "google-gemini", "imagen-4.0-fast-generate-001")
+    state.set_engine("images", "google-gemini", "gemini-3-pro-image")
     assert captured_env["IMAGE_ENGINE"] == "google-gemini"
-    assert captured_env["IMAGE_MODEL_NAME"] == "imagen-4.0-fast-generate-001"
+    assert captured_env["IMAGE_MODEL_NAME"] == "gemini-3-pro-image"
 
 
 def test_set_engine_custom_selector_keeps_model_untouched(captured_env):

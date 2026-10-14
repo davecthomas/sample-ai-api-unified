@@ -1,3 +1,3 @@
-"""Menu-driven console app exercising every capability of ai-api-unified."""
+"""Textual TUI sample app exercising every capability of ai-api-unified."""
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

@@ -7,7 +7,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.widgets import Button, DataTable, Static
 
-from ... import catalog, envfile, onboarding, state
+from ... import catalog, envfile, fallback, onboarding, state
 from ..modals import ChoiceModal, OnboardingModal
 from .base import CapabilityScreen
 
@@ -28,10 +28,12 @@ class ProvidersScreen(CapabilityScreen):
         yield Static("Provider credentials", classes="field-label")
         yield DataTable(id="status-table", cursor_type="none")
         yield Static("", classes="field-label", id="retry-line")
+        yield Static("", classes="field-label", id="fallback-line")
         with Horizontal(classes="actions"):
             yield Button("Switch engine…", variant="primary", id="switch")
             yield Button("Configure keys…", id="keys")
             yield Button("Retry policy…", id="retry")
+            yield Button("Fallback chain…", id="fallback")
 
     def on_mount(self) -> None:
         config = self.query_one("#config-table", DataTable)
@@ -58,6 +60,13 @@ class ProvidersScreen(CapabilityScreen):
         policy = envfile.get_env(RETRY_POLICY_ENV, "") or "default"
         self.query_one("#retry-line", Static).update(
             f"completions retry policy: {policy}  ({RETRY_POLICY_ENV})"
+        )
+        chain = fallback.current_chain()
+        self.query_one("#fallback-line", Static).update(
+            f"completions fallback chain: {chain} on {fallback.current_fallback_on()}  "
+            f"({fallback.FALLBACKS_ENV})"
+            if chain
+            else f"completions fallback chain: off  ({fallback.FALLBACKS_ENV})"
         )
 
     @on(Button.Pressed, "#switch")
@@ -124,6 +133,71 @@ class ProvidersScreen(CapabilityScreen):
             self._refresh()
 
         self.app.push_screen(ChoiceModal("Completions retry policy", options), picked)
+
+    @on(Button.Pressed, "#fallback")
+    def _on_fallback(self) -> None:
+        # Model fallback (library 2.32): COMPLETIONS_FALLBACKS turns every
+        # factory-built completions client into an AiFallbackCompletions.
+        current = fallback.current_chain()
+        current_on = fallback.current_fallback_on()
+        choices = [
+            (
+                f"Gemini ({fallback.GEMINI_FALLBACK}) on outages, rate limits, quota",
+                fallback.DEFAULT_FALLBACK_ON,
+            ),
+            (
+                f"Gemini ({fallback.GEMINI_FALLBACK}), also on unknown/retired models",
+                fallback.FALLBACK_ON_WITH_MODEL,
+            ),
+            ("Off", ""),
+        ]
+        options = []
+        for label, fallback_on in choices:
+            is_current = (
+                current == fallback.GEMINI_FALLBACK and current_on == fallback_on
+                if fallback_on
+                else not current
+            )
+            options.append((f"{label}{' (current)' if is_current else ''}", fallback_on or "off"))
+
+        def picked(choice: str | None) -> None:
+            if not choice:
+                return
+            if choice == "off":
+                fallback.clear_chain()
+                self.set_result("result", "Completions fallback chain turned off.")
+                self._refresh()
+                return
+            google = catalog.PROVIDERS["google"]
+            if not catalog.provider_configured(google):
+                # The fallback engine needs its own credentials, exactly as it
+                # would as the primary; collect them before saving the chain.
+                def done(ready: bool) -> None:
+                    if ready:
+                        self._save_fallback(choice)
+                    else:
+                        self.set_result(
+                            "result",
+                            "[yellow]Google Gemini not configured; fallback chain "
+                            "not saved.[/yellow]",
+                        )
+
+                self.app.push_screen(OnboardingModal(google), done)
+                return
+            self._save_fallback(choice)
+
+        self.app.push_screen(ChoiceModal("Completions fallback chain", options), picked)
+
+    def _save_fallback(self, fallback_on: str) -> None:
+        fallback.set_chain(fallback.GEMINI_FALLBACK, fallback_on)
+        self.set_result(
+            "result",
+            f"Fallback chain set: {fallback.FALLBACKS_ENV}={fallback.GEMINI_FALLBACK}, "
+            f"{fallback.FALLBACK_ON_ENV}={fallback_on}. A completions request that fails "
+            "with one of those reasons is retried on Gemini; results name the fallback "
+            "when it answered.",
+        )
+        self._refresh()
 
     @on(Button.Pressed, "#keys")
     def _on_keys(self) -> None:
