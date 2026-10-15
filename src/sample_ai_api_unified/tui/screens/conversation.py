@@ -386,7 +386,7 @@ class ConversationScreen(CapabilityScreen):
     async def _failover_worker(self) -> None:
         import asyncio
 
-        from ai_api_unified import AIFactory, AiFallbackReason
+        from ai_api_unified import DEFAULT_FALLBACK_REASONS, AIFactory, AiFallbackReason
 
         engine = state.current_engine(CAPABILITY)
         try:
@@ -394,12 +394,7 @@ class ConversationScreen(CapabilityScreen):
                 completions_engine=engine,
                 model_name=FAILOVER_DEMO_MODEL,
                 fallbacks=[(fallback.GEMINI_FALLBACK_ENGINE, fallback.GEMINI_FALLBACK_MODEL)],
-                fallback_on={
-                    AiFallbackReason.UNAVAILABLE,
-                    AiFallbackReason.RATE_LIMITED,
-                    AiFallbackReason.QUOTA_EXHAUSTED,
-                    AiFallbackReason.MODEL_UNAVAILABLE,
-                },
+                fallback_on={*DEFAULT_FALLBACK_REASONS, AiFallbackReason.MODEL_UNAVAILABLE},
             )
             message = self.query_one("#message", Input).value.strip() or SAMPLE_MESSAGE
             turn = await asyncio.to_thread(

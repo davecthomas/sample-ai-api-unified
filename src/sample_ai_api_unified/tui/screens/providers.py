@@ -142,7 +142,7 @@ class ProvidersScreen(CapabilityScreen):
         current_on = fallback.current_fallback_on()
         choices = [
             (
-                f"Gemini ({fallback.GEMINI_FALLBACK}) on outages, rate limits, quota",
+                f"Gemini ({fallback.GEMINI_FALLBACK}) on outages, rate limits, quota, rejected keys",
                 fallback.DEFAULT_FALLBACK_ON,
             ),
             (
@@ -154,7 +154,8 @@ class ProvidersScreen(CapabilityScreen):
         options = []
         for label, fallback_on in choices:
             is_current = (
-                current == fallback.GEMINI_FALLBACK and current_on == fallback_on
+                current == fallback.GEMINI_FALLBACK
+                and fallback.same_reasons(current_on, fallback_on)
                 if fallback_on
                 else not current
             )
@@ -190,12 +191,16 @@ class ProvidersScreen(CapabilityScreen):
 
     def _save_fallback(self, fallback_on: str) -> None:
         fallback.set_chain(fallback.GEMINI_FALLBACK, fallback_on)
+        reasons = (
+            f"{fallback.FALLBACK_ON_ENV} unset, so the library default applies ({fallback_on})"
+            if fallback.same_reasons(fallback_on, fallback.DEFAULT_FALLBACK_ON)
+            else f"{fallback.FALLBACK_ON_ENV}={fallback_on}"
+        )
         self.set_result(
             "result",
             f"Fallback chain set: {fallback.FALLBACKS_ENV}={fallback.GEMINI_FALLBACK}, "
-            f"{fallback.FALLBACK_ON_ENV}={fallback_on}. A completions request that fails "
-            "with one of those reasons is retried on Gemini; results name the fallback "
-            "when it answered.",
+            f"{reasons}. A completions request that fails with one of those reasons is "
+            "retried on Gemini; results name the fallback when it answered.",
         )
         self._refresh()
 
