@@ -105,12 +105,14 @@ raises `AiProviderCapabilityUnsupportedError`; every screen shows that as a
 yellow capability note naming the gate rather than as a red failure.
 
 On the same screen, **Fallback chain…** sets up model fallback (library 2.32).
-It writes `COMPLETIONS_FALLBACKS=google-gemini:gemini-3.7-flash` and
-`COMPLETIONS_FALLBACK_ON` to `.env`, and asks for Google credentials first if
-they are missing. You can fail over on outages, rate limits, exhausted quota,
-and rejected API keys (the library default), add `model_unavailable` to also
-fail over on an unknown or retired model id, or turn the chain off. While the chain is on, every
-completions client the app builds is an `AiFallbackCompletions`. When Gemini
+It writes `COMPLETIONS_FALLBACKS=google-gemini:gemini-3.7-flash` to `.env`,
+and asks for Google credentials first if they are missing. You can fail over
+on outages, rate limits, exhausted quota, and rejected API keys (the library
+default), add `model_unavailable` to also fail over on an unknown or retired
+model id, or turn the chain off. The app writes `COMPLETIONS_FALLBACK_ON` only
+for the `model_unavailable` option; otherwise it leaves it unset so the
+library's default applies, including reasons added in later releases. While
+the chain is on, every completions client the app builds is an `AiFallbackCompletions`. When Gemini
 answers a request the primary could not, the completions and conversation
 screens say which model served it.
 

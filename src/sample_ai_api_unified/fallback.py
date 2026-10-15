@@ -25,7 +25,9 @@ GEMINI_FALLBACK = f"{GEMINI_FALLBACK_ENGINE}:{GEMINI_FALLBACK_MODEL}"
 # The library default (DEFAULT_FALLBACK_REASONS; auth_rejected joined in 2.33):
 # failures another model could serve. model_unavailable (404, unknown or retired
 # model id) is off by default because it usually means a typo that a working
-# fallback would hide. tests/test_fallback.py keeps this in sync with the library.
+# fallback would hide. Used for display only: choosing the default leaves
+# COMPLETIONS_FALLBACK_ON unset so the library's own default applies and a saved
+# list never goes stale. tests/test_fallback.py keeps this in sync.
 DEFAULT_FALLBACK_ON = "unavailable,rate_limited,quota_exhausted,auth_rejected"
 FALLBACK_ON_WITH_MODEL = f"{DEFAULT_FALLBACK_ON},model_unavailable"
 
@@ -39,8 +41,22 @@ def current_fallback_on() -> str:
     return envfile.get_env(FALLBACK_ON_ENV, "").strip() or DEFAULT_FALLBACK_ON
 
 
-def set_chain(chain: str, fallback_on: str = DEFAULT_FALLBACK_ON) -> None:
-    envfile.set_env_values({FALLBACKS_ENV: chain, FALLBACK_ON_ENV: fallback_on})
+def same_reasons(left: str, right: str) -> bool:
+    """True when two comma-separated reason lists name the same reasons."""
+
+    def parse(value: str) -> set[str]:
+        return {part.strip().lower() for part in value.split(",") if part.strip()}
+
+    return parse(left) == parse(right)
+
+
+def set_chain(chain: str, fallback_on: str = "") -> None:
+    """Save the chain; write the reasons only when they differ from the default."""
+    envfile.set_env_values({FALLBACKS_ENV: chain})
+    if fallback_on and not same_reasons(fallback_on, DEFAULT_FALLBACK_ON):
+        envfile.set_env_values({FALLBACK_ON_ENV: fallback_on})
+    else:
+        envfile.unset_env_value(FALLBACK_ON_ENV)
 
 
 def clear_chain() -> None:

@@ -40,9 +40,22 @@ def test_set_and_clear_chain_round_trip(offline_env, monkeypatch):
     fallback.set_chain(fallback.GEMINI_FALLBACK, fallback.FALLBACK_ON_WITH_MODEL)
     assert envfile.get_env(fallback.FALLBACKS_ENV) == "google-gemini:gemini-3.7-flash"
     assert "model_unavailable" in fallback.current_fallback_on()
+    # Choosing the default unsets the reasons, so the library default applies.
+    fallback.set_chain(fallback.GEMINI_FALLBACK, fallback.DEFAULT_FALLBACK_ON)
+    assert envfile.get_env(fallback.FALLBACK_ON_ENV) == ""
+    assert fallback.current_chain() == fallback.GEMINI_FALLBACK
     fallback.clear_chain()
     assert fallback.current_chain() == ""
     assert fallback.current_fallback_on() == fallback.DEFAULT_FALLBACK_ON
+
+
+def test_same_reasons_ignores_order_case_and_spaces():
+    assert fallback.same_reasons(
+        "auth_rejected, QUOTA_EXHAUSTED,rate_limited,unavailable", fallback.DEFAULT_FALLBACK_ON
+    )
+    assert not fallback.same_reasons(
+        "unavailable,rate_limited,quota_exhausted", fallback.DEFAULT_FALLBACK_ON
+    )
 
 
 def test_default_fallback_on_matches_library_default():
