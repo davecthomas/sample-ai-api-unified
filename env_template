@@ -21,7 +21,7 @@ DEFAULT_GEMINI_TTS_MODEL=gemini-2.5-pro-tts
 COMPLETIONS_FALLBACKS=google-gemini:gemini-3.7-flash
 # Failures that move a request to the next model. This is the library default;
 # add model_unavailable to also fail over on an unknown or retired model id.
-COMPLETIONS_FALLBACK_ON=unavailable,rate_limited,quota_exhausted
+COMPLETIONS_FALLBACK_ON=unavailable,rate_limited,quota_exhausted,auth_rejected
 
 # Provider credentials — leave blank; the app walks you through getting and
 # saving each key the first time you use a provider.

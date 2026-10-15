@@ -1,6 +1,6 @@
 [project]
 name = "sample-ai-api-unified"
-version = "0.8.0"
+version = "0.8.1"
 description = "Textual TUI sample app for ai-api-unified: one Python API across OpenAI, Anthropic Claude, Google Gemini, and AWS Bedrock for completions, tool use, structured output, model fallback, embeddings, image, video, and voice."
 authors = [{ name = "Dave Thomas" }]
 license = { text = "MIT" }

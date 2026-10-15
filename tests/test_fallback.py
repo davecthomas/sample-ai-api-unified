@@ -45,6 +45,13 @@ def test_set_and_clear_chain_round_trip(offline_env, monkeypatch):
     assert fallback.current_fallback_on() == fallback.DEFAULT_FALLBACK_ON
 
 
+def test_default_fallback_on_matches_library_default():
+    """The sample writes the default reasons to .env; they must match the library's."""
+    assert set(fallback.DEFAULT_FALLBACK_ON.split(",")) == {
+        reason.value for reason in aiu.DEFAULT_FALLBACK_REASONS
+    }
+
+
 def test_gemini_fallback_engine_is_registered():
     from ai_api_unified.ai_provider_registry import get_ai_provider_spec
 

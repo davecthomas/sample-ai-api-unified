@@ -142,7 +142,7 @@ class ProvidersScreen(CapabilityScreen):
         current_on = fallback.current_fallback_on()
         choices = [
             (
-                f"Gemini ({fallback.GEMINI_FALLBACK}) on outages, rate limits, quota",
+                f"Gemini ({fallback.GEMINI_FALLBACK}) on outages, rate limits, quota, rejected keys",
                 fallback.DEFAULT_FALLBACK_ON,
             ),
             (

@@ -22,10 +22,11 @@ GEMINI_FALLBACK_ENGINE = "google-gemini"
 GEMINI_FALLBACK_MODEL = "gemini-3.7-flash"
 GEMINI_FALLBACK = f"{GEMINI_FALLBACK_ENGINE}:{GEMINI_FALLBACK_MODEL}"
 
-# The library default: failures another model could serve. model_unavailable
-# (404, unknown or retired model id) is off by default because it usually means
-# a typo that a working fallback would hide.
-DEFAULT_FALLBACK_ON = "unavailable,rate_limited,quota_exhausted"
+# The library default (DEFAULT_FALLBACK_REASONS; auth_rejected joined in 2.33):
+# failures another model could serve. model_unavailable (404, unknown or retired
+# model id) is off by default because it usually means a typo that a working
+# fallback would hide. tests/test_fallback.py keeps this in sync with the library.
+DEFAULT_FALLBACK_ON = "unavailable,rate_limited,quota_exhausted,auth_rejected"
 FALLBACK_ON_WITH_MODEL = f"{DEFAULT_FALLBACK_ON},model_unavailable"
 
 
